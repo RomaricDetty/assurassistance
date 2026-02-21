@@ -1,0 +1,265 @@
+/* Effet de survol pour les lignes du tableau */
+.table-row-hover {
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.table-row-hover:hover {
+    background-color: #f6f2f271 !important;
+}
+
+/* Amélioration de l'effet de survol pour les cellules */
+.table-row-hover:hover td {
+    border-color: #e9ecef;
+}
+
+/* Effet de survol pour les icônes d'action */
+.table-row-hover:hover .las.la-eye {
+    color: #0d6efd !important;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Animation douce pour les badges de statut */
+.table-row-hover:hover .badge {
+  
+    transition: all 0.2s ease-in-out;
+}
+
+/* Effet de survol pour les services */
+.table-row-hover:hover .service-badge {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Amélioration de la lisibilité au survol */
+.table-row-hover:hover {
+    font-weight: 500;
+}
+
+/* Effet de survol pour les montants */
+.table-row-hover:hover .fw-medium {
+    color: #0d6efd;
+    font-weight: 600;
+}
+
+/* Responsive - désactiver les effets sur mobile */
+@media (max-width: 768px) {
+    .table-row-hover:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    
+    .table-row-hover:hover .las.la-eye,
+    .table-row-hover:hover .badge,
+    .table-row-hover:hover .service-badge {
+        transform: none;
+    }
+}
+
+
+/* Steps Progress */
+.transfer-steps {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+}
+
+.step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+}
+
+.step-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+}
+
+.step.active .step-number {
+    background-color: #4285f4;
+    color: white;
+}
+
+.step.completed .step-number {
+    background-color: #34a853;
+    color: white;
+}
+
+.step.completed .step-number::after {
+    content: '✓';
+    position: absolute;
+}
+
+.step-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-align: center;
+}
+
+.step.active .step-label {
+    color: #4285f4;
+    font-weight: 600;
+}
+
+.step-line {
+    height: 2px;
+    background-color: #e9ecef;
+    flex: 1;
+    margin: 0 10px;
+    margin-bottom: 28px;
+}
+
+.step.completed ~ .step-line {
+    background-color: #34a853;
+}
+
+/* Payment Provider Cards */
+.payment-provider-card {
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.payment-provider-card:hover {
+    border-color: #4285f4;
+    background-color: rgba(66, 133, 244, 0.05);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.provider-logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+}
+
+.provider-logo-small {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+}
+
+.provider-logo-tiny {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+}
+
+.provider-name {
+    font-weight: 600;
+    font-size: 16px;
+    flex: 1;
+    margin-left: 15px;
+}
+
+.payment-provider-card i {
+    font-size: 24px;
+    color: #6c757d;
+}
+
+.payment-provider-card:hover i {
+    color: #4285f4;
+}
+
+/* Selected Provider */
+.selected-provider {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+/* Transfer Summary */
+.transfer-summary {
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+}
+
+.summary-item:not(:last-child) {
+    border-bottom: 1px solid #e9ecef;
+}
+
+.summary-label {
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.summary-value {
+    font-size: 16px;
+    color: #212529;
+    display: flex;
+    align-items: center;
+}
+
+/* Step Content */
+.step-content {
+    min-height: 300px;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .transfer-steps {
+        padding: 0 10px;
+    }
+
+    .step-label {
+        font-size: 10px;
+    }
+
+    .step-number {
+        width: 35px;
+        height: 35px;
+        font-size: 14px;
+    }
+
+    .payment-provider-card {
+        padding: 15px;
+    }
+
+    .provider-logo {
+        width: 50px;
+        height: 50px;
+    }
+
+    .provider-name {
+        font-size: 14px;
+    }
+}

@@ -1,0 +1,289 @@
+/* Sidebar Toggle Styles */
+.startbar {
+    transition: all 0.3s ease-in-out;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 10000;
+    background-color: #141824;
+    color: #ffffff;
+}
+
+/* Mode étendu (sidebar complète) */
+.sidebar-expanded {
+    width: 280px;
+    transform: translateX(0);
+}
+
+/* Mode réduit (icônes seulement) */
+.sidebar-collapsed {
+    width: 70px;
+    transform: translateX(0);
+}
+
+/* Page wrapper styles - CORRECTION IMPORTANTE */
+.page-wrapper {
+    transition: all 0.3s ease-in-out;
+    min-height: 100vh;
+}
+
+/* Desktop - Sidebar ouverte */
+@media (min-width: 769px) {
+    .page-wrapper.sidebar-open {
+        margin-left: 280px;
+        width: calc(100% - 280px);
+    }
+    
+    /* Desktop - Sidebar fermée */
+    .page-wrapper.sidebar-closed {
+        margin-left: 70px;
+        width: calc(100% - 70px);
+    }
+}
+
+/* Styles pour le mode réduit */
+.sidebar-collapsed .logo-text {
+    display: none !important;
+}
+
+.sidebar-collapsed .menu-label span {
+    display: none !important;
+}
+
+.sidebar-collapsed .nav-link span {
+    display: none !important;
+}
+
+.sidebar-collapsed .nav-link .badge {
+    display: none !important;
+}
+
+.sidebar-collapsed .collapse {
+    display: none !important;
+}
+
+.sidebar-collapsed .update-msg {
+    display: none !important;
+}
+
+/* Centrer les icônes dans le mode réduit */
+.sidebar-collapsed .nav-link {
+    justify-content: center;
+    padding: 0.75rem 0.5rem;
+}
+
+.sidebar-collapsed .menu-icon {
+    margin-right: 0 !important;
+}
+
+/* Pied de sidebar */
+.sidebar-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-collapsed .sidebar-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Styles généraux pour les éléments de la sidebar */
+.nav-link {
+    color: #cbd5e1 !important;
+    transition: all 0.3s ease;
+}
+
+.nav-link span {
+    color: #cbd5e1 !important;
+}
+
+.nav-link i {
+    color: #cbd5e1 !important;
+}
+
+/* Brand/Logo styles */
+.brand {
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.brand p {
+    color: #e2e8f0 !important;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* Menu labels */
+.menu-label {
+    color: #94a3b8 !important;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Collapse submenu */
+.collapse .nav-link {
+    padding-left: 2rem;
+    font-size: 0.9rem;
+}
+
+.collapse .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #e2e8f0 !important;
+}
+
+/* Badges */
+.nav-link .badge {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Scrollbar styling */
+.startbar-collapse::-webkit-scrollbar {
+    width: 4px;
+}
+
+.startbar-collapse::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.startbar-collapse::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+}
+
+.startbar-collapse::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Style pour le lien actif - VERSION AMÉLIORÉE */
+.nav-link.active {
+    background: linear-gradient(90deg, rgba(66, 133, 244, 0.2) 0%, rgba(66, 133, 244, 0.1) 100%);
+    color: #60a5fa !important;
+    border-left: 4px solid #60a5fa;
+    font-weight: 600;
+    padding-left: calc(1rem - 4px);
+}
+
+.nav-link.active span {
+    color: #60a5fa !important;
+    font-weight: 600;
+}
+
+.nav-link.active i {
+    color: #60a5fa !important;
+    transform: scale(1.1);
+}
+
+/* Effet hover pour les liens non actifs */
+.nav-link:hover:not(.active) {
+    background-color: rgba(255, 255, 255, 0.08);
+    transition: all 0.3s ease;
+    color: #e2e8f0 !important;
+}
+
+.nav-link:hover:not(.active) span {
+    color: #e2e8f0 !important;
+}
+
+.nav-link:hover:not(.active) i {
+    color: #e2e8f0 !important;
+}
+
+/* Pour le mode réduit */
+.sidebar-collapsed .nav-link.active {
+    border-left: 4px solid #60a5fa;
+    padding-left: calc(0.5rem - 4px);
+}
+
+/* Mobile responsive - CORRECTION IMPORTANTE */
+@media (max-width: 768px) {
+    .startbar {
+        width: 280px !important;
+    }
+    
+    /* Par défaut sur mobile, la sidebar est cachée */
+    .sidebar-collapsed {
+        transform: translateX(-100%) !important;
+        width: 280px !important;
+    }
+    
+    /* Quand la sidebar est ouverte sur mobile */
+    .sidebar-expanded {
+        transform: translateX(0) !important;
+        width: 280px !important;
+    }
+    
+    /* Sur mobile, pas de margin-left - LE CONTENU PREND TOUTE LA LARGEUR */
+    .page-wrapper {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    
+    .page-wrapper.sidebar-closed {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    
+    .page-wrapper.sidebar-open {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+}
+
+/* Overlay for mobile */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+/* Afficher l'overlay seulement sur mobile quand la sidebar est ouverte */
+@media (max-width: 768px) {
+    .sidebar-expanded + .sidebar-overlay {
+        display: block;
+    }
+}
+
+/* Cacher l'overlay sur desktop */
+@media (min-width: 769px) {
+    .sidebar-overlay {
+        display: none !important;
+    }
+}
+
+/* Animation de la flèche du menu collapse */
+.las.la-angle-down {
+    transition: transform 0.3s ease;
+}
+
+.las.la-angle-down.rotated {
+    transform: rotate(180deg);
+}
+
+/* Style pour les sous-menus actifs */
+.collapse .nav-link.active {
+    background-color: rgba(96, 165, 250, 0.1);
+    color: #60a5fa;
+    border-left: 3px solid #60a5fa;
+    padding-left: 1.5rem;
+}
+
+/* Style pour le parent actif */
+.nav-link.active {
+    background: linear-gradient(135deg, rgba(96, 165, 250, 0.1) 0%, rgba(96, 165, 250, 0.05) 100%);
+    color: #60a5fa;
+    border-left: 3px solid #60a5fa;
+}

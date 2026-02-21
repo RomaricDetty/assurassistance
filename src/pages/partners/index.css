@@ -1,0 +1,39 @@
+/* Style pour les boutons d'œil */
+.input-group .btn-outline-secondary {
+    border-left: 0;
+    background-color: #fff;
+    transition: all 0.2s ease;
+}
+
+.input-group .btn-outline-secondary:hover {
+    background-color: #f8f9fa;
+    color: #0d6efd;
+    border-color: #dee2e6;
+}
+
+.input-group .btn-outline-secondary:focus {
+    box-shadow: none;
+    border-color: #dee2e6;
+}
+
+.input-group .btn-outline-secondary i {
+    transition: transform 0.2s ease;
+}
+
+.input-group .btn-outline-secondary:hover i {
+    transform: scale(1.1);
+}
+
+/* Assurer que l'input et le bouton sont alignés */
+.input-group > .form-control:not(:last-child) {
+    border-right: 0;
+}
+
+.input-group > .form-control:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.input-group > .form-control:focus + .btn-outline-secondary {
+    border-color: #86b7fe;
+}

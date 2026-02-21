@@ -2062,6 +2062,10 @@
     background-color: var(--color-bg);
   }
 
+  .bg-\[\#ffffff\] {
+    background-color: #fff;
+  }
+
   .bg-accent {
     background-color: var(--accent);
   }
@@ -2531,6 +2535,10 @@
 
   .text-background {
     color: var(--background);
+  }
+
+  .text-black {
+    color: var(--color-black);
   }
 
   .text-card-foreground {
