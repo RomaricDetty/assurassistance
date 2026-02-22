@@ -4,26 +4,44 @@ Back-office d'administration pour **Assur'Assistance**.
 
 ## Description
 
-Application web permettant la génération de fichiers PDF des clients de Assur'Assistance
+Application web de gestion des clients et de génération de contrats PDF pour Assur'Assistance.
 
 ## Fonctionnalités principales
 
-- **Gestion des partenaires** : Création, modification et suivi des partenaires avec configuration des frais et commissions
-- **Transactions** : Suivi des transactions entrantes (payin) et sortantes (payout) avec filtres et statistiques
-- **Transferts** : Gestion des transferts depuis les comptes partenaire et agrégateur vers les providers de paiement mobile (Orange Money, MTN Mobile Money, Wave, Moov)
-- **Commissions et frais** : Configuration des frais de transaction et des commissions entre partenaires
-- **Webhooks** : Configuration et gestion des webhooks pour les notifications en temps réel
-- **Tableau de bord** : Statistiques et rapports sur les transactions et les performances
+- **Tableau de bord** : Statistiques et nombre de clients par type de contrat (Business, Premier, Platinum)
+- **Clients** : Liste, création, modification et suppression des clients avec pagination
+- **Contrats clients** : Saisie (formulaire ou Excel), enregistrement du client et génération des contrats PDF
+- **Administration** : Gestion des administrateurs (liste paginée)
+- **Profil** : Consultation et modification des informations de l'administrateur connecté
+- **Authentification** : Connexion / déconnexion, persistance de session
+- **Thème** : Mode clair ou sombre (persistant, mode sombre par défaut)
 
 ## Technologies
 
 - **React 19** avec Vite
+- Redux (redux-persist, redux-thunk)
+- React Router
+- Bootstrap 5, pdf-lib, xlsx
+
+## Prérequis
+
+- **Node.js** : version 18 ou supérieure (recommandé : 20 LTS)
+
+Vérifier la version installée : `node -v`
 
 ## Installation
 
+```bash
 npm install
-npm run dev## Build
+npm run dev
+```
 
-npm run build## Auteur
+## Build
+
+```bash
+npm run build
+```
+
+## Auteur
 
 Detty Romaric
