@@ -1,0 +1,76 @@
+/**
+ * Responsive et mobile-friendly - détails pour tous les écrans.
+ */
+
+/* Tableau de bord : chiffre total lisible sur tous les écrans */
+.home-total-count {
+    font-size: clamp(1.75rem, 6vw, 3rem);
+    line-height: 1.2;
+}
+
+/* Scroll horizontal fluide sur les tableaux (touch) */
+.table-responsive {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Modals : body scrollable sur petit écran */
+@media (max-width: 576px) {
+    .modal-body {
+        max-height: min(70vh, 360px);
+        overflow-y: auto;
+    }
+}
+
+/* Pied de tableau (pagination) : empiler proprement sur mobile */
+@media (max-width: 576px) {
+    .table-footer {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+    .table-footer .pagination {
+        justify-content: center;
+    }
+}
+
+/* Éviter le débordement horizontal sur les pages */
+.page-content {
+    overflow-x: hidden;
+}
+
+/* Titre et fil d'Ariane : pas de débordement sur mobile */
+.page-title-box {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.breadcrumb {
+    flex-wrap: wrap;
+}
+.page-title {
+    word-break: break-word;
+}
+
+/* Zones tactiles minimales pour boutons d’action (mobile) */
+@media (max-width: 768px) {
+    .btn-sm.p-2 {
+        min-width: 2.25rem;
+        min-height: 2.25rem;
+    }
+}
+
+/* Dropdown utilisateur dans la topbar : sortir du flux, afficher sous la navbar */
+.topbar {
+    overflow: visible;
+}
+.topbar .dropdown {
+    position: relative;
+}
+.topbar .topbar-dropdown-menu,
+.topbar .dropdown-menu.dropdown-menu-end {
+    position: absolute !important;
+    top: 100% !important;
+    left: auto !important;
+    right: 0 !important;
+    margin-top: 0.125rem;
+    z-index: 1050;
+}

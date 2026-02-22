@@ -1,0 +1,20 @@
+/**
+ * Thème Assur'Assistance - Couleur primary unique : #e4590f
+ * Ce fichier est chargé en dernier pour garantir l'uniformité sur toutes les pages.
+ */
+:root,
+[data-bs-theme="light"] {
+  --bs-primary: #e4590f;
+  --bs-primary-rgb: 228, 89, 15;
+  --bs-blue: #e4590f;
+  --bs-blue-rgb: 228, 89, 15;
+  --bs-link-color: #e4590f;
+  --bs-link-hover-color: #b8460c;
+}
+
+[data-bs-theme="dark"] {
+  --bs-primary: #e4590f;
+  --bs-primary-rgb: 228, 89, 15;
+  --bs-link-color: #f0a67a;
+  --bs-link-hover-color: #f5c199;
+}

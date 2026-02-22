@@ -1,116 +1,80 @@
 import React, { useState, useEffect } from 'react';
-import { getStatistics } from '../../config/urls/partners';
-import { getAllPayinTransactions } from '../../config/urls/transaction';
 import { useSelector } from 'react-redux';
-import { sendToastError } from '../../helpers';
-import { Footer } from '../../components/footer';
-import { ReportChart } from '../../components/transaction/report-chart';
-import { TransactionList } from '../../components/transaction/list';
 import { Layout } from '../../components/layout';
+import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
+import { listClients } from '../../services/clients';
+import { TYPES_CONTRAT } from '../../utils/pdfContrat';
+import { sendToastError } from '../../helpers';
 
+/**
+ * Récupère tous les clients page par page et retourne les effectifs par type de contrat.
+ */
+const fetchCountsByType = async (token) => {
+    const limit = 100;
+    let page = 1;
+    let totalPages = 1;
+    const all = [];
+    do {
+        const res = await listClients(token, { page, limit });
+        const list = Array.isArray(res.data) ? res.data : res.data?.clients ?? res.data?.data ?? [];
+        all.push(...list);
+        const meta = res.meta || {};
+        totalPages = meta.totalPages ?? Math.ceil((meta.total ?? list.length) / (meta.limit ?? limit));
+        if (list.length < limit) break;
+        page++;
+    } while (page <= totalPages);
+    const counts = { Business: 0, Premier: 0, Platinum: 0 };
+    all.forEach((c) => {
+        const t = c.typeContrat || 'Business';
+        if (counts[t] !== undefined) counts[t]++;
+        else counts.Business++;
+    });
+    return counts;
+};
+
+/** Style et icône par type de contrat pour les cartes du tableau de bord */
+const TYPE_STYLE = {
+    Business: {
+        icon: 'iconoir-bag',
+        color: '#e4590f',
+        bgLight: 'rgba(228, 89, 15, 0.08)',
+        label: 'Contrat Business'
+    },
+    Premier: {
+        icon: 'iconoir-star',
+        color: '#0da684',
+        bgLight: 'rgba(13, 166, 132, 0.08)',
+        label: 'Contrat Premier'
+    },
+    Platinum: {
+        icon: 'iconoir-medal',
+        color: '#2c7be5',
+        bgLight: 'rgba(44, 123, 229, 0.08)',
+        label: 'Contrat Platinum'
+    }
+};
+
+/**
+ * Tableau de bord - page d'accueil : affiche le nombre de clients par type de contrat.
+ */
 export const Home = () => {
-
-    const token = useSelector(state => state.auth.token)
-
-    const [statistics, setStatistics] = useState(null)
-    const [payinTransactions, setPayinTransactions] = useState(null)
-    const [loading, setLoading] = useState(true)
-    const [pagination, setPagination] = useState(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [filters, setFilters] = useState({});
-
-    const fetchStatistics = async ({
-        period = null,
-        end_date = null,
-        start_date = null,
-        top_limit = 10
-    } = {}) => {
-        try {
-            const queryParams = new URLSearchParams({
-                period,
-                end_date,
-                start_date,
-                top_limit
-            });
-
-            const response = await fetch(`${getStatistics}?${queryParams.toString()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            const result = await response.json()
-            if (result.success) {
-                setStatistics(result.data)
-            } else {
-                sendToastError('Erreur lors de la récupération des statistiques')
-            }
-        } catch (error) {
-            console.error('Erreur:', error)
-            sendToastError('Erreur lors de la récupération des statistiques')
-        }
-    }
-    const fetchPayinTransactions = async ({
-        start_date = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-        end_date = new Date().toISOString().split('T')[0],
-        page = 1,
-        limit = 10,
-        ...otherFilters
-    } = {}) => {
-        try {
-
-            const queryParams = new URLSearchParams({
-                start_date,
-                end_date,
-                page,
-                limit,
-                ...otherFilters
-            });
-            const response = await fetch(`${getAllPayinTransactions}?${queryParams.toString()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-            const result = await response.json()
-            if (result.success) {
-                setPayinTransactions(result.data.response)
-                setPagination(result.data.pagination || null)
-            } else {
-                sendToastError('Erreur lors de la récupération des transactions')
-            }
-        } catch (error) {
-            console.error('Erreur:', error)
-            sendToastError('Erreur lors de la récupération des transactions')
-        } finally {
-            setLoading(false)
-        }
-    }
-    const handlePeriodChange = (dateParams) => {
-        fetchPayinTransactions(dateParams);
-        setCurrentPage(1);
-    };
-
-    const handlePageChange = (page) => {
-        setCurrentPage(page);
-        fetchPayinTransactions({ page, ...filters });
-    };
-
-    // const handleFiltersChange = (newFilters) => {
-    //     setFilters(newFilters);
-    //     setCurrentPage(1);
-    //     fetchPayinTransactions({ ...newFilters, page: 1 });
-    // };
+    const token = useSelector((s) => s.auth.token);
+    const [countsByType, setCountsByType] = useState({ Business: 0, Premier: 0, Platinum: 0 });
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchStatistics({})
-        fetchPayinTransactions()
-    }, [])
+        if (!token) return;
+        setLoading(true);
+        fetchCountsByType(token)
+            .then(setCountsByType)
+            .catch(() => sendToastError('Erreur chargement des statistiques'))
+            .finally(() => setLoading(false));
+    }, [token]);
 
-  return (
+    const total = (countsByType.Business ?? 0) + (countsByType.Premier ?? 0) + (countsByType.Platinum ?? 0);
+
+    return (
         <Layout>
             <div className="page-content">
                 <div className="container-fluid">
@@ -118,244 +82,98 @@ export const Home = () => {
                         <div className="col-sm-12">
                             <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
                                 <h4 className="page-title">Tableau de bord</h4>
-                                <div className="">
-                                    <ol className="breadcrumb mb-0">
-                                        <li className="breadcrumb-item">
-                                            <a href="#">OrionPay</a>
-                                        </li>
-                                        {/*end nav-item*/}
-                                        <li className="breadcrumb-item active">Tableau de bord</li>
-                                    </ol>
-                                </div>
+                                <ol className="breadcrumb mb-0">
+                                    <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
+                                    <li className="breadcrumb-item active">Tableau de bord</li>
+                                </ol>
                             </div>
-                            {/*end page-title-box*/}
                         </div>
-                        {/*end col*/}
                     </div>
-                    {/*end row*/}
-                    {statistics && (
-                        <div className="row justify-content-center">
 
-                            {/*end col*/}
-                            <div className="col-lg-12">
-                                <div className="row justify-content-center">
-                                    <div className="col-md-6 col-lg-6">
-                                        <div className="card bg-corner-img">
-                                            <div className="card-body">
-                                                <div className="row d-flex justify-content-center">
-                                                    <div className="col-12">
-                                                        <p className="text-muted text-uppercase mb-0 fw-normal fs-13">
-                                                            Revenu Total
-                                                        </p>
-                                                        <h4 className="mt-1 mb-0 fw-medium">{statistics?.main_statistics.total_revenue} FCFA</h4>
-                                                    </div>
-                                                    
+                    {loading ? (
+                        <div className="text-center py-5"><Loader /></div>
+                    ) : (
+                        <>
+                            <div className="row mb-4">
+                                <div className="col-12">
+                                    <div className="card border-0 shadow-sm overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(228, 89, 15, 0.06) 0%, rgba(228, 89, 15, 0.02) 100%)' }}>
+                                        <div className="card-body py-4 px-3 px-sm-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                            <div className="d-flex align-items-center gap-2 gap-sm-3">
+                                                <div className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: 48, height: 48, backgroundColor: 'rgba(228, 89, 15, 0.15)' }}>
+                                                    <i className="iconoir-community" style={{ fontSize: '1.5rem', color: '#e4590f' }} />
                                                 </div>
-                                                {/*end row*/}
+                                                <div className="min-w-0">
+                                                    <h5 className="mb-0 fw-semibold text-truncate">Total clients</h5>
+                                                    <p className="text-muted small mb-0 d-none d-sm-block">Tous types de contrats confondus</p>
+                                                </div>
                                             </div>
-                                            {/*end card-body*/}
-                                        </div>
-                                        {/*end card*/}
-                                    </div>
-                                    {/*end col*/}
-                                    <div className="col-md-6 col-lg-6">
-                                        <div className="card bg-corner-img">
-                                            <div className="card-body">
-                                                <div className="row d-flex justify-content-center">
-                                                    <div className="col-12">
-                                                        <p className="text-muted text-uppercase mb-0 fw-normal fs-13">
-                                                            Moyenne de Revenu
-                                                        </p>
-                                                        <h4 className="mt-1 mb-0 fw-medium">{statistics?.main_statistics.average_revenue} FCFA</h4>
-                                                    </div>
-                                                    
-                                                </div>
-                                                {/*end row*/}
-                                            </div>
-                                            {/*end card-body*/}
-                                        </div>
-                                        {/*end card*/}
-                                    </div>
-                                    {/*end col*/}
-                                    <div className="col-md-6 col-lg-6">
-                                        <div className="card bg-corner-img">
-                                            <div className="card-body">
-                                                <div className="row d-flex justify-content-center">
-                                                    <div className="col-12">
-                                                        <p className="text-muted text-uppercase mb-0 fw-normal fs-13">
-                                                            Marchands
-                                                        </p>
-                                                        <h4 className="mt-1 mb-0 fw-medium">{statistics?.main_statistics.total_merchants}</h4>
-                                                    </div>
-                                                </div>
-                                                {/*end row*/}
-                                            </div>
-                                            {/*end card-body*/}
-                                        </div>
-                                        {/*end card*/}
-                                    </div>
-                                    {/*end col*/}
-
-                                    {/*end col*/}
-                                    <div className="col-md-6 col-lg-6">
-                                        <div className="card bg-corner-img">
-                                            <div className="card-body">
-                                                <div className="row d-flex justify-content-center">
-                                                    <div className="col-12">
-                                                        <p className="text-muted text-uppercase mb-0 fw-normal fs-13">
-                                                            Partenaires
-                                                        </p>
-                                                        <h4 className="mt-1 mb-0 fw-medium">{statistics?.main_statistics.total_partners}</h4>
-                                                    </div>
-                                                </div>
+                                            <div className="text-end ms-auto">
+                                                <span className="home-total-count fw-bold" style={{ color: '#e4590f' }}>{total}</span>
+                                                <span className="text-muted ms-1">client(s)</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                {/*end row*/}
                             </div>
-                            {/*end col*/}
-                            <div className="col-md-12 col-lg-12">
-                                {loading ? <div className="d-flex justify-content-center align-items-center p-5">
-                                    <Loader />
-                                </div> :
-                                    <ReportChart
-                                        payinTransactions={payinTransactions}
-                                        onPeriodChange={handlePeriodChange}
-                                    />}
-                                {/*end card*/}
+
+                            <h5 className="mb-3 fw-semibold">Répartition par type de contrat</h5>
+                            <div className="row g-3 g-md-4">
+                                {TYPES_CONTRAT.map(({ value }) => {
+                                    const style = TYPE_STYLE[value] || TYPE_STYLE.Business;
+                                    const count = countsByType[value] ?? 0;
+                                    const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+                                    return (
+                                        <div key={value} className="col-12 col-sm-6 col-xl-4">
+                                            <div
+                                                className="card border-0 h-100 overflow-hidden position-relative"
+                                                style={{
+                                                    boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+                                                    transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.transform = 'translateY(-4px)';
+                                                    e.currentTarget.style.boxShadow = '0 12px 28px rgba(0,0,0,0.12)';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.style.transform = '';
+                                                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)';
+                                                }}
+                                            >
+                                                <div style={{ backgroundColor: style.bgLight }}>
+                                                    <div className="card-body p-3 p-sm-4">
+                                                        <div className="d-flex align-items-start justify-content-between mb-2 mb-sm-3">
+                                                            <div
+                                                                className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                                                                style={{ width: 44, height: 44, backgroundColor: 'rgba(255,255,255,0.9)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+                                                            >
+                                                                <i className={style.icon} style={{ fontSize: '1.35rem', color: style.color }} />
+                                                            </div>
+                                                            <span className="badge rounded-pill px-2 py-1" style={{ backgroundColor: style.color, color: '#fff', fontSize: '0.7rem' }}>
+                                                                {percent} %
+                                                            </span>
+                                                        </div>
+                                                        <h2 className="fw-bold mb-1 fs-2" style={{ color: style.color }}>
+                                                            {count}
+                                                        </h2>
+                                                        <p className="text-muted small mb-2">{style.label}</p>
+                                                        <div className="rounded-2 overflow-hidden" style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.06)' }}>
+                                                            <div
+                                                                className="h-100 rounded-2"
+                                                                style={{ width: `${percent}%`, backgroundColor: style.color, transition: 'width 0.5s ease' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                            {/*end col*/}
-                        </div>
+                        </>
                     )}
-                    {/*end row*/}
-                    <div className="row justify-content-center">
-                        {/*end col*/}
-                        <div className="col-md-12 col-lg-12 order-1 order-lg-2">
-                            {loading ? <div className="d-flex justify-content-center align-items-center p-5">
-                                <Loader />
-                            </div> :
-                                <TransactionList
-                                    transactions={payinTransactions}
-                                    onPeriodChange={handlePeriodChange}
-                                    hasFilters={false}
-                                    onPageChange={handlePageChange}
-                                    hasPagination={false}
-                                    // pagination={pagination}
-                                    // onFiltersChange={handleFiltersChange}
-                                />}
-                            {/*end card*/}
-                        </div>{" "}
-                        {/*end col*/}
-                    </div>
-                    {/*end row*/}
                 </div>
-                {/* container */}
-                {/*Start Rightbar*/}
-                {/*Start Rightbar/offcanvas*/}
-                <div
-                    className="offcanvas offcanvas-end"
-                    tabIndex={-1}
-                    id="Appearance"
-                    aria-labelledby="AppearanceLabel"
-                >
-                    <div className="offcanvas-header border-bottom justify-content-between">
-                        <h5 className="m-0 font-14" id="AppearanceLabel">
-                            Appearance
-                        </h5>
-                        <button
-                            type="button"
-                            className="btn-close text-reset p-0 m-0 align-self-center"
-                            data-bs-dismiss="offcanvas"
-                            aria-label="Close"
-                        />
-                    </div>
-                    <div className="offcanvas-body">
-                        <h6>Account Settings</h6>
-                        <div className="p-2 text-start mt-3">
-                            <div className="form-check form-switch mb-2">
-                                <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    id="settings-switch1"
-                                />
-                                <label className="form-check-label" htmlFor="settings-switch1">
-                                    Auto updates
-                                </label>
-                            </div>
-                            {/*end form-switch*/}
-                            <div className="form-check form-switch mb-2">
-                                <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    id="settings-switch2"
-                                    defaultChecked=""
-                                />
-                                <label className="form-check-label" htmlFor="settings-switch2">
-                                    Location Permission
-                                </label>
-                            </div>
-                            {/*end form-switch*/}
-                            <div className="form-check form-switch">
-                                <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    id="settings-switch3"
-                                />
-                                <label className="form-check-label" htmlFor="settings-switch3">
-                                    Show offline Contacts
-                                </label>
-                            </div>
-                            {/*end form-switch*/}
-                        </div>
-                        {/*end /div*/}
-                        <h6>General Settings</h6>
-                        <div className="p-2 text-start mt-3">
-                            <div className="form-check form-switch mb-2">
-                                <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    id="settings-switch4"
-                                />
-                                <label className="form-check-label" htmlFor="settings-switch4">
-                                    Show me Online
-                                </label>
-                            </div>
-                            {/*end form-switch*/}
-                            <div className="form-check form-switch mb-2">
-                                <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    id="settings-switch5"
-                                    defaultChecked=""
-                                />
-                                <label className="form-check-label" htmlFor="settings-switch5">
-                                    Status visible to all
-                                </label>
-                            </div>
-                            {/*end form-switch*/}
-                            <div className="form-check form-switch">
-                                <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    id="settings-switch6"
-                                />
-                                <label className="form-check-label" htmlFor="settings-switch6">
-                                    Notifications Popup
-                                </label>
-                            </div>
-                            {/*end form-switch*/}
-                        </div>
-                        {/*end /div*/}
-                    </div>
-                    {/*end offcanvas-body*/}
-                </div>
-                {/*end Rightbar/offcanvas*/}
-                {/*end Rightbar*/}
-                {/*Start Footer*/}
                 <Footer />
-                {/*end footer*/}
             </div>
         </Layout>
-  )
-}
+    );
+};

@@ -139,7 +139,7 @@
 
 /* Badges */
 .nav-link .badge {
-    background-color: #3b82f6 !important;
+    background-color: #e4590f !important;
     color: #ffffff !important;
     font-size: 0.7rem;
     padding: 0.25rem 0.5rem;
@@ -163,22 +163,22 @@
     background: rgba(255, 255, 255, 0.5);
 }
 
-/* Style pour le lien actif - VERSION AMÉLIORÉE */
+/* Style pour le lien actif - couleur primary #e4590f */
 .nav-link.active {
-    background: linear-gradient(90deg, rgba(66, 133, 244, 0.2) 0%, rgba(66, 133, 244, 0.1) 100%);
-    color: #60a5fa !important;
-    border-left: 4px solid #60a5fa;
+    background: linear-gradient(90deg, rgba(228, 89, 15, 0.2) 0%, rgba(228, 89, 15, 0.1) 100%);
+    color: #e4590f !important;
+    border-left: 4px solid #e4590f;
     font-weight: 600;
     padding-left: calc(1rem - 4px);
 }
 
 .nav-link.active span {
-    color: #60a5fa !important;
+    color: #e4590f !important;
     font-weight: 600;
 }
 
 .nav-link.active i {
-    color: #60a5fa !important;
+    color: #e4590f !important;
     transform: scale(1.1);
 }
 
@@ -199,7 +199,7 @@
 
 /* Pour le mode réduit */
 .sidebar-collapsed .nav-link.active {
-    border-left: 4px solid #60a5fa;
+    border-left: 4px solid #e4590f;
     padding-left: calc(0.5rem - 4px);
 }
 
@@ -275,15 +275,15 @@
 
 /* Style pour les sous-menus actifs */
 .collapse .nav-link.active {
-    background-color: rgba(96, 165, 250, 0.1);
-    color: #60a5fa;
-    border-left: 3px solid #60a5fa;
+    background-color: rgba(228, 89, 15, 0.1);
+    color: #e4590f;
+    border-left: 3px solid #e4590f;
     padding-left: 1.5rem;
 }
 
 /* Style pour le parent actif */
 .nav-link.active {
-    background: linear-gradient(135deg, rgba(96, 165, 250, 0.1) 0%, rgba(96, 165, 250, 0.05) 100%);
-    color: #60a5fa;
-    border-left: 3px solid #60a5fa;
+    background: linear-gradient(135deg, rgba(228, 89, 15, 0.1) 0%, rgba(228, 89, 15, 0.05) 100%);
+    color: #e4590f;
+    border-left: 3px solid #e4590f;
 }

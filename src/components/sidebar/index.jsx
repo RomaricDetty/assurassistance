@@ -1,9 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router';
-import LogoSm from '../../assets/images/logo_assurassistance.png';
-import LogoLight from '../../assets/images/logo_assurassistance.png';
-import LogoDark from '../../assets/images/logo_assurassistance.png';
-import Gold from '../../assets/images/extra/gold.png';
+import LogoMark from '../../assets/images/logo_mark.png';
 import './sidebar.css';
 
 export const Sidebar = ({ isOpen }) => {
@@ -25,14 +22,14 @@ export const Sidebar = ({ isOpen }) => {
             <div className="brand">
                 <Link to="/" className="logo">
                     <span>
-                        <img src={LogoSm} alt="logo-small" className="logo-sm" />
+                        <img src={LogoMark} alt="logo-small" className="logo-sm" />
                     </span>
                     <span className={`logo-text ${isOpen ? '' : 'd-none'}`}>
-                        <img src={LogoLight} alt="logo-large" className="logo-lg logo-light" />
-                        <img src={LogoDark} alt="logo-large" className="logo-lg logo-dark" />
+                        <img src={LogoMark} alt="logo-large" className="logo-lg logo-light" />
+                        <img src={LogoMark} alt="logo-large" className="logo-lg logo-dark" />
                     </span>
                 </Link>
-                <p className={isOpen ? '' : 'd-none'} style={{ marginBottom: '0px', marginLeft: '10px' }}> Admin - Assur'Assistance</p>
+                <p className={isOpen ? '' : 'd-none'} style={{ marginBottom: '0px', marginLeft: '10px' }}> Assur'Assistance</p>
             </div>
             {/* end brand */}
 
@@ -46,59 +43,42 @@ export const Sidebar = ({ isOpen }) => {
                                 <Link
                                     className={`nav-link ${isActive('/') ? 'active' : ''}`}
                                     to="/"
-                                    title="Dashboard"
-                                   
+                                    title="Tableau de bord"
                                 >
                                     <i className="iconoir-report-columns menu-icon"></i>
                                     <span className={isOpen ? '' : 'd-none'}>Tableau de bord</span>
                                 </Link>
                             </li>
+                            
                             <li className="nav-item">
                                 <Link
-                                    className={`nav-link ${isActive('/partners') ? 'active' : ''}`}
-                                    to="/partners"
-                                    title="Partners"
+                                    className={`nav-link ${isActive('/contrats-clients') ? 'active' : ''}`}
+                                    to="/contrats-clients"
+                                    title="Contrats clients"
                                 >
-                                    <i className="iconoir-group menu-icon"></i>
-                                    <span className={isOpen ? '' : 'd-none'}>Partenaires</span>
+                                    <i className="iconoir-page menu-icon"></i>
+                                    <span className={isOpen ? '' : 'd-none'}>Contrats clients</span>
                                 </Link>
                             </li>
                             <li className="nav-item">
-                                <a 
-                                    className={`nav-link ${isParentActive(['/transactions']) ? 'active' : ''}`} 
-                                    href="#sidebarTransactions" 
-                                    data-bs-toggle="collapse" 
-                                    role="button"
-                                    aria-expanded={isParentActive(['/transactions']) ? 'true' : 'false'} 
-                                    aria-controls="sidebarTransactions" 
-                                    title="Transactions"
+                                <Link
+                                    className={`nav-link ${isActive('/clients') ? 'active' : ''}`}
+                                    to="/clients"
+                                    title="Clients"
                                 >
-                                    <i className="iconoir-task-list menu-icon"></i>
-                                    <span className={isOpen ? '' : 'd-none'}>Transactions</span>
-                                  
-                                </a>
-                                <div className={`collapse ${isParentActive(['/transactions']) ? 'show' : ''} ${isOpen ? '' : 'd-none'}`} id="sidebarTransactions">
-                                    <ul className="nav flex-column">
-                                        <li className="nav-item">
-                                            <Link
-                                                to="/transactions/payin"
-                                                    
-                                                className={`nav-link ${isActive('/transactions/payin') ? 'active' : ''}`}
-                                            >
-                                                Paiements
-                                            </Link>
-                                        </li>
-                                        <li className="nav-item">
-                                            <Link
-                                                to="/transactions/payout"
-                                                    
-                                                className={`nav-link ${isActive('/transactions/payout') ? 'active' : ''}`}
-                                            >
-                                                Transferts
-                                            </Link>
-                                        </li>
-                                    </ul>
-                                </div>
+                                    <i className="iconoir-community menu-icon"></i>
+                                    <span className={isOpen ? '' : 'd-none'}>Clients</span>
+                                </Link>
+                            </li>
+                            <li className="nav-item">
+                                <Link
+                                    className={`nav-link ${isActive('/administration') ? 'active' : ''}`}
+                                    to="/administration"
+                                    title="Administration"
+                                >
+                                    <i className="iconoir-settings menu-icon"></i>
+                                    <span className={isOpen ? '' : 'd-none'}>Administration</span>
+                                </Link>
                             </li>
                         </ul>
                     </div>

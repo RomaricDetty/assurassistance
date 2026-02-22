@@ -6,6 +6,7 @@ const initialState = {
     token: null,
     role: null,
     accountType: null,
+    administrateur: null,
 }
 
 export const authReducer = (state = initialState, action) => {
@@ -15,7 +16,8 @@ export const authReducer = (state = initialState, action) => {
                 ...state,
                 token: null,
                 role: null,
-                accountType: null
+                accountType: null,
+                administrateur: null
             }
         case actionTypes.SIGN_IN_START:
             return {
@@ -29,6 +31,7 @@ export const authReducer = (state = initialState, action) => {
                 token: action.token,
                 role: action.role,
                 accountType: action.accountType,
+                administrateur: action.administrateur ?? state.administrateur,
                 error: null
             }
         case actionTypes.SIGN_IN_FAILED:

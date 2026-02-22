@@ -41,7 +41,6 @@ export const Layout = ({ children }) => {
                 <div className="sidebar-overlay" onClick={toggleSidebar}></div>
             )}
 
-            {/* SUPPRIMEZ LE STYLE INLINE ICI */}
             <div className={`page-wrapper ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
                 {/* Page Content*/}
                 {children}

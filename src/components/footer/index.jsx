@@ -9,10 +9,7 @@ export const Footer = () => {
                 <div className="card mb-0 rounded-bottom-0">
                     <div className="card-body">
                         <p className="text-muted mb-0">
-                            © Orion Pay
-                            <span className="text-muted d-none d-sm-inline-block float-end">
-                                by Orionnode
-                            </span>
+                            © Assur'Assistance
                         </p>
                     </div>
                 </div>

@@ -12,14 +12,16 @@ export const useTokenExpiration = () => {
             if (!token) return;
             try {
                 const decoded = jwtDecode(token);
+                const exp = decoded?.exp;
+                if (exp == null) return;
                 const currentTime = Date.now() / 1000;
-                if (decoded.exp < currentTime) {
+                if (exp < currentTime) {
                     dispatch(logOut());
-                    sendToastError("Votre session a expiré, veuillez vous reconnecter")
+                    sendToastError("Votre session a expiré, veuillez vous reconnecter");
                 }
             } catch (error) {
                 dispatch(logOut());
-                sendToastError("Une erreur est survenue lors de la vérification du token, veuillez vous reconnecter")
+                sendToastError("Une erreur est survenue lors de la vérification du token, veuillez vous reconnecter");
             }
         };
 
