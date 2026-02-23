@@ -13,14 +13,14 @@
     position: absolute;
     inset: 0px;
     border-radius: 50%;
-    border: 5px solid #02C25D;
+    border: 5px solid #e4590f;
     animation: prixClipFix 2s linear infinite;
 }
 
 .loader::after {
     inset: 8px;
     transform: rotate3d(90, 90, 0, 180deg);
-    border-color: #2574ea;
+    border-color: #efefef;
 }
 
 @keyframes rotate {
