@@ -17,6 +17,7 @@
     "apexcharts": "^5.3.5",
     "buffer": "^6.0.3",
     "javascript-time-ago": "^2.5.11",
+    "jszip": "^3.10.1",
     "jwt-decode": "^4.0.0",
     "pdf-lib": "^1.17.1",
     "react": "^19.1.1",

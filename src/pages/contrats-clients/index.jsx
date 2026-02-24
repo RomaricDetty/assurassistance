@@ -14,6 +14,7 @@ import {
 } from '../../utils/pdfContrat';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 
 const INITIAL_FORM = {
     prenom: '',
@@ -30,6 +31,7 @@ export const ContratsClients = () => {
     const token = useSelector((s) => s.auth.token);
     const [formData, setFormData] = useState(INITIAL_FORM);
     const [loading, setLoading] = useState(false);
+    const [loadingExcel, setLoadingExcel] = useState(false);
     const [errors, setErrors] = useState({});
     const [pdfFieldNames, setPdfFieldNames] = useState(null);
     const [loadingFields, setLoadingFields] = useState(false);
@@ -170,7 +172,11 @@ export const ContratsClients = () => {
         });
     };
 
-    /** Pour chaque ligne Excel : enregistre le client via l'API puis génère le PDF. */
+    /**
+     * Pour chaque ligne Excel : enregistre le client via l'API, génère le PDF en mémoire,
+     * puis regroupe tous les PDF dans une archive ZIP et déclenche un seul téléchargement
+     * (évite le blocage des navigateurs sur les téléchargements multiples).
+     */
     const handleExcelUpload = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -188,8 +194,10 @@ export const ContratsClients = () => {
             e.target.value = '';
             return;
         }
-        setLoading(true);
+        setLoadingExcel(true);
         try {
+            const zip = new JSZip();
+            const usedNames = new Set();
             let saved = 0;
             for (let i = 0; i < list.length; i++) {
                 const data = list[i];
@@ -208,14 +216,29 @@ export const ContratsClients = () => {
                 if (!res.ok) continue;
                 const buffer = await res.arrayBuffer();
                 const filled = await fillPdfContrat(buffer, data);
-                const blob = new Blob([filled], { type: 'application/pdf' });
-                downloadBlob(blob, getContratFileName(data));
+                let fileName = getContratFileName(data);
+                while (usedNames.has(fileName)) {
+                    const ext = fileName.replace(/\.pdf$/i, '');
+                    const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
+                    const base = match ? match[1] : ext;
+                    const num = match ? parseInt(match[2], 10) + 1 : 1;
+                    fileName = `${base}_${num}.pdf`;
+                }
+                usedNames.add(fileName);
+                zip.file(fileName, filled, { binary: true });
             }
-            sendToastSuccess(`${saved} client(s) enregistré(s) et contrat(s) généré(s)`);
+            if (saved === 0) {
+                sendToastError('Aucun client enregistré');
+                e.target.value = '';
+                return;
+            }
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(zipBlob, 'contrats_clients.zip');
+            sendToastSuccess(`${saved} client(s) enregistré(s), archive téléchargée`);
         } catch (err) {
             sendToastError(err.message || 'Erreur lors de la génération');
         } finally {
-            setLoading(false);
+            setLoadingExcel(false);
             e.target.value = '';
         }
     };
@@ -323,11 +346,17 @@ export const ContratsClients = () => {
                                 <div className="card-header">
                                     <h5 className="card-title mb-0">Import Excel</h5>
                                 </div>
-                                <div className="card-body">
+                                <div className="card-body position-relative">
+                                    {loadingExcel && (
+                                        <div className="position-absolute top-0 start-0 end-0 bottom-0 d-flex flex-column align-items-center justify-content-center rounded bg-white bg-opacity-50" style={{ zIndex: 5 }}>
+                                            <Loader />
+                                            <span className="mt-2 text-muted small">Enregistrement et génération en cours...</span>
+                                        </div>
+                                    )}
                                     <p className="text-muted small mb-2">
-                                        Colonnes Excel : <strong>Prénoms</strong>, <strong>Nom</strong>, <strong>ID / N° de carte</strong>, <strong>Type de contrat</strong> (Business, Premier ou Platinum).
+                                        Colonnes Excel : <strong>Prénoms</strong>, <strong>Nom</strong>, <strong>ID / N° de carte</strong>, <strong>Type de contrat</strong> (Business, Premier ou Platinum). Les contrats générés sont regroupés dans une archive ZIP (un seul téléchargement).
                                     </p>
-                                    <button type="button" className="btn btn-outline-success btn-sm mb-3" onClick={handleDownloadExcelTemplate}>
+                                    <button type="button" className="btn btn-outline-success btn-sm mb-3" onClick={handleDownloadExcelTemplate} disabled={loadingExcel}>
                                         <i className="iconoir-download me-1" /> Télécharger un fichier Excel modèle
                                     </button>
                                     <input
@@ -336,7 +365,7 @@ export const ContratsClients = () => {
                                         accept=".xlsx,.xls"
                                         className="form-control"
                                         onChange={handleExcelUpload}
-                                        disabled={loading}
+                                        disabled={loadingExcel}
                                     />
                                 </div>
                             </div>

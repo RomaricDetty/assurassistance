@@ -32,6 +32,9 @@ export const Clients = () => {
     const [generatingAll, setGeneratingAll] = useState(false);
     const [clientToDelete, setClientToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+    const [deletingBulk, setDeletingBulk] = useState(false);
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(DEFAULT_LIMIT);
     const [total, setTotal] = useState(0);
@@ -60,6 +63,43 @@ export const Clients = () => {
     useEffect(() => {
         fetchList(page, limit);
     }, [token, page, limit]);
+
+    /** Réinitialise la sélection lors du changement de page ou de limite. */
+    useEffect(() => {
+        setSelectedIds([]);
+    }, [page, limit]);
+
+    /** Bascule la sélection d'un client. */
+    const toggleSelect = (id) => {
+        setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+    };
+
+    /** Sélectionne ou désélectionne tous les clients de la page courante. */
+    const toggleSelectAll = () => {
+        const allSelected = clients.length > 0 && selectedIds.length === clients.length;
+        setSelectedIds(allSelected ? [] : clients.map((c) => c.id));
+    };
+
+    /** Supprime en masse les clients sélectionnés après confirmation. */
+    const handleBulkDelete = async () => {
+        if (selectedIds.length === 0) return;
+        setDeletingBulk(true);
+        let done = 0;
+        try {
+            for (const id of selectedIds) {
+                const res = await deleteClient(token, id);
+                if (res.success !== false && (res.data != null || res.message === undefined)) done++;
+            }
+            sendToastSuccess(`${done} client(s) supprimé(s)`);
+            setSelectedIds([]);
+            setShowBulkDeleteModal(false);
+            fetchList(page, limit);
+        } catch (err) {
+            sendToastError('Erreur lors de la suppression');
+        } finally {
+            setDeletingBulk(false);
+        }
+    };
 
     const openEdit = (client) => {
         setEditingId(client.id);
@@ -183,10 +223,18 @@ export const Clients = () => {
                             <div className="card">
                                 <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <h5 className="card-title mb-0">Liste des clients</h5>
-                                    <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || clients.length === 0} title="Générer les contrats de la page courante">
-                                        <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
-                                        {generatingAll ? <span className="ms-1">Génération...</span> : <span className="ms-1">Générer contrats (cette page)</span>}
-                                    </button>
+                                    <div className="d-flex align-items-center gap-2">
+                                        {selectedIds.length > 0 && (
+                                            <button type="button" className="btn btn-danger btn-sm" onClick={() => setShowBulkDeleteModal(true)} title="Supprimer la sélection">
+                                                <i className="iconoir-trash" style={{ fontSize: '1.1rem' }} />
+                                                <span className="ms-1">Supprimer ({selectedIds.length})</span>
+                                            </button>
+                                        )}
+                                        <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || clients.length === 0} title="Générer les contrats de la page courante">
+                                            <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
+                                            {generatingAll ? <span className="ms-1">Génération...</span> : <span className="ms-1">Générer contrats (cette page)</span>}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="card-body">
                                     {loading ? (
@@ -196,6 +244,9 @@ export const Clients = () => {
                                             <table className="table table-hover mb-0">
                                                 <thead>
                                                     <tr>
+                                                        <th style={{ width: 44 }}>
+                                                            <input type="checkbox" className="form-check-input" checked={clients.length > 0 && selectedIds.length === clients.length} onChange={toggleSelectAll} aria-label="Tout sélectionner" title="Tout sélectionner" />
+                                                        </th>
                                                         <th>Prénoms</th>
                                                         <th>Nom</th>
                                                         <th>ID Carte</th>
@@ -205,10 +256,13 @@ export const Clients = () => {
                                                 </thead>
                                                 <tbody>
                                                     {clients.length === 0 ? (
-                                                        <tr><td colSpan="5" className="text-center text-muted">Aucun client</td></tr>
+                                                        <tr><td colSpan="6" className="text-center text-muted">Aucun client</td></tr>
                                                     ) : (
                                                         clients.map((c) => (
                                                             <tr key={c.id}>
+                                                                <td>
+                                                                    <input type="checkbox" className="form-check-input" checked={selectedIds.includes(c.id)} onChange={() => toggleSelect(c.id)} aria-label={`Sélectionner ${c.prenomClient} ${c.nomClient}`} />
+                                                                </td>
                                                                 <td>{c.prenomClient}</td>
                                                                 <td>{c.nomClient}</td>
                                                                 <td>{c.idCarteBancaire}</td>
@@ -329,6 +383,26 @@ export const Clients = () => {
                             <div className="modal-footer">
                                 <button type="button" className="btn btn-secondary" onClick={() => setClientToDelete(null)}>Annuler</button>
                                 <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>{deleting ? 'Suppression...' : 'Supprimer'}</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showBulkDeleteModal && (
+                <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="modal-dialog modal-dialog-centered">
+                        <div className="modal-content">
+                            <div className="modal-header">
+                                <h5 className="modal-title">Supprimer la sélection</h5>
+                                <button type="button" className="btn-close" onClick={() => setShowBulkDeleteModal(false)} aria-label="Fermer" />
+                            </div>
+                            <div className="modal-body">
+                                <p className="mb-0">Supprimer <strong>{selectedIds.length} client(s)</strong> ? Cette action est irréversible.</p>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowBulkDeleteModal(false)}>Annuler</button>
+                                <button type="button" className="btn btn-danger" onClick={handleBulkDelete} disabled={deletingBulk}>{deletingBulk ? 'Suppression...' : 'Supprimer'}</button>
                             </div>
                         </div>
                     </div>
