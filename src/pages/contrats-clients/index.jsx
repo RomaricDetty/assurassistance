@@ -23,6 +23,18 @@ const INITIAL_FORM = {
     typeContrat: ''
 };
 
+/** Indique si la réponse API signale un client déjà existant (doublon). */
+const isDuplicateError = (res) => {
+    const msg = (res?.message || res?.error || '').toLowerCase();
+    return /exist|déjà|duplicate|doublon|already|unique|contraint/i.test(msg);
+};
+
+/** Message d'erreur affiché pour un doublon. */
+const getDuplicateMessage = (res) => {
+    if (res?.message?.trim()) return res.message;
+    return 'Ce client existe déjà.';
+};
+
 /**
  * Page Contrats clients : formulaire pour pré-remplir un PDF par type de contrat,
  * téléchargement du fichier renommé, ou import Excel pour génération en lot.
@@ -112,7 +124,8 @@ export const ContratsClients = () => {
             };
             const createRes = await createClient(token, payload);
             if (!createRes.data && !createRes.success) {
-                sendToastError(createRes.message || 'Erreur enregistrement client');
+                const msg = isDuplicateError(createRes) ? getDuplicateMessage(createRes) : (createRes.message || 'Erreur enregistrement client');
+                sendToastError(msg);
                 return;
             }
             const url = getTemplateUrl(formData.typeContrat);
@@ -194,11 +207,14 @@ export const ContratsClients = () => {
             e.target.value = '';
             return;
         }
+        const totalProcessed = list.filter((r) => r.nom || r.prenom).length;
         setLoadingExcel(true);
         try {
             const zip = new JSZip();
             const usedNames = new Set();
             let saved = 0;
+            let duplicateCount = 0;
+            let firstOtherErrorMessage = null;
             for (let i = 0; i < list.length; i++) {
                 const data = list[i];
                 if (!data.nom && !data.prenom) continue;
@@ -209,7 +225,14 @@ export const ContratsClients = () => {
                     typeContrat: data.typeContrat || 'Business'
                 };
                 const createRes = await createClient(token, payload);
-                if (!createRes.data && !createRes.success) continue;
+                if (!createRes.data && !createRes.success) {
+                    if (isDuplicateError(createRes)) {
+                        duplicateCount++;
+                    } else {
+                        if (!firstOtherErrorMessage) firstOtherErrorMessage = createRes.message || 'Erreur enregistrement';
+                    }
+                    continue;
+                }
                 saved++;
                 const url = getTemplateUrl(data.typeContrat);
                 const res = await fetch(url);
@@ -218,23 +241,27 @@ export const ContratsClients = () => {
                 const filled = await fillPdfContrat(buffer, data);
                 let fileName = getContratFileName(data);
                 while (usedNames.has(fileName)) {
-                    const ext = fileName.replace(/\.pdf$/i, '');
                     const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
-                    const base = match ? match[1] : ext;
+                    const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
                     const num = match ? parseInt(match[2], 10) + 1 : 1;
                     fileName = `${base}_${num}.pdf`;
                 }
                 usedNames.add(fileName);
                 zip.file(fileName, filled, { binary: true });
             }
-            if (saved === 0) {
-                sendToastError('Aucun client enregistré');
-                e.target.value = '';
-                return;
+            if (duplicateCount > 0) {
+                sendToastError(`${duplicateCount} des ${totalProcessed} donnée(s) existent déjà.`);
             }
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            downloadBlob(zipBlob, 'contrats_clients.zip');
-            sendToastSuccess(`${saved} client(s) enregistré(s), archive téléchargée`);
+            if (firstOtherErrorMessage) {
+                sendToastError(firstOtherErrorMessage);
+            }
+            if (saved > 0) {
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                downloadBlob(zipBlob, 'contrats_clients.zip');
+                sendToastSuccess(`${saved} client(s) enregistré(s), archive téléchargée`);
+            } else if (duplicateCount === 0 && !firstOtherErrorMessage) {
+                sendToastError('Aucun client enregistré');
+            }
         } catch (err) {
             sendToastError(err.message || 'Erreur lors de la génération');
         } finally {
