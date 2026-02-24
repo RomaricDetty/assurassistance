@@ -6,6 +6,7 @@ import { Loader } from '../../components/loader';
 import { listClients, updateClient, deleteClient } from '../../services/clients';
 import { getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob } from '../../utils/pdfContrat';
 import { sendToastError, sendToastSuccess } from '../../helpers';
+import JSZip from 'jszip';
 
 /** Mappe un client API vers les données attendues par fillPdfContrat. */
 const clientToPdfData = (c) => ({
@@ -157,7 +158,7 @@ export const Clients = () => {
         }
     };
 
-    /** Génère les PDF pour tous les clients. */
+    /** Génère les PDF de la page courante et les regroupe dans une archive ZIP (un seul téléchargement). */
     const handleGenerateAll = async () => {
         if (clients.length === 0) {
             sendToastError('Aucun client à traiter');
@@ -165,6 +166,9 @@ export const Clients = () => {
         }
         setGeneratingAll(true);
         try {
+            const zip = new JSZip();
+            const usedNames = new Set();
+            let count = 0;
             for (const client of clients) {
                 const url = getTemplateUrl(client.typeContrat || 'Business');
                 const res = await fetch(url);
@@ -172,10 +176,24 @@ export const Clients = () => {
                 const buffer = await res.arrayBuffer();
                 const data = clientToPdfData(client);
                 const filled = await fillPdfContrat(buffer, data);
-                const blob = new Blob([filled], { type: 'application/pdf' });
-                downloadBlob(blob, getContratFileName(data));
+                let fileName = getContratFileName(data);
+                while (usedNames.has(fileName)) {
+                    const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
+                    const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
+                    const num = match ? parseInt(match[2], 10) + 1 : 1;
+                    fileName = `${base}_${num}.pdf`;
+                }
+                usedNames.add(fileName);
+                zip.file(fileName, filled, { binary: true });
+                count++;
             }
-            sendToastSuccess(`${clients.length} contrat(s) généré(s)`);
+            if (count === 0) {
+                sendToastError('Aucun contrat généré');
+                return;
+            }
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(zipBlob, 'contrats_clients.zip');
+            sendToastSuccess(`${count} contrat(s) dans l'archive téléchargée`);
         } catch (err) {
             sendToastError(err.message || 'Erreur génération');
         } finally {
@@ -230,9 +248,9 @@ export const Clients = () => {
                                                 <span className="ms-1">Supprimer ({selectedIds.length})</span>
                                             </button>
                                         )}
-                                        <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || clients.length === 0} title="Générer les contrats de la page courante">
+                                        <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || clients.length === 0} title="Générer les contrats de la page en une archive ZIP">
                                             <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
-                                            {generatingAll ? <span className="ms-1">Génération...</span> : <span className="ms-1">Générer contrats (cette page)</span>}
+                                            {generatingAll ? <span className="ms-1">Génération...</span> : <span className="ms-1">Générer contrats (ZIP)</span>}
                                         </button>
                                     </div>
                                 </div>
