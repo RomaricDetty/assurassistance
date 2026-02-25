@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
@@ -16,7 +16,7 @@ const clientToPdfData = (c) => ({
     typeContrat: c.typeContrat ?? 'Business'
 });
 
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 100;
 
 /**
  * Page Clients : liste des clients (paginée), modification, génération de contrat (par ligne ou page).
@@ -44,8 +44,21 @@ export const Clients = () => {
     const [limit, setLimit] = useState(DEFAULT_LIMIT);
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const TYPES = [{ value: 'Business', label: 'Business' }, { value: 'Premier', label: 'Premier' }, { value: 'Platinum', label: 'Platinum' }];
+
+    /** Filtre les clients de la page courante par prénom, nom, n° carte ou type de contrat. */
+    const filteredClients = useMemo(() => {
+        const t = searchTerm.trim().toLowerCase();
+        if (!t) return clients;
+        return clients.filter((c) =>
+            (c.prenomClient ?? '').toLowerCase().includes(t) ||
+            (c.nomClient ?? '').toLowerCase().includes(t) ||
+            (c.idCarteBancaire ?? '').toLowerCase().includes(t) ||
+            (c.typeContrat ?? '').toLowerCase().includes(t)
+        );
+    }, [clients, searchTerm]);
 
     const fetchList = async (pageNum = page, limitNum = limit) => {
         if (!token) return;
@@ -79,10 +92,10 @@ export const Clients = () => {
         setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
     };
 
-    /** Sélectionne ou désélectionne tous les clients de la page courante. */
+    /** Sélectionne ou désélectionne tous les clients visibles (filtrés). */
     const toggleSelectAll = () => {
-        const allSelected = clients.length > 0 && selectedIds.length === clients.length;
-        setSelectedIds(allSelected ? [] : clients.map((c) => c.id));
+        const allSelected = filteredClients.length > 0 && selectedIds.length === filteredClients.length;
+        setSelectedIds(allSelected ? [] : filteredClients.map((c) => c.id));
     };
 
     /** Supprime en masse les clients sélectionnés (par lots pour garder l’UI réactive : 100, 500, 1000…). */
@@ -172,13 +185,14 @@ export const Clients = () => {
         }
     };
 
-    /** Génère les PDF de la page courante (même méthode que Contrats clients : cache templates, lots en parallèle, ZIP multiples). */
+    /** Génère les PDF des clients visibles (filtrés) ou de toute la page si pas de recherche. */
     const handleGenerateAll = async () => {
-        if (clients.length === 0) {
+        const toGenerate = filteredClients;
+        if (toGenerate.length === 0) {
             sendToastError('Aucun client à traiter');
             return;
         }
-        const total = clients.length;
+        const total = toGenerate.length;
         const CHUNK_SIZE =
             total <= 500 ? 500
             : total <= 2000 ? 200
@@ -202,7 +216,7 @@ export const Clients = () => {
             let countInZip = 0;
             for (let start = 0; start < total; start += CHUNK_SIZE) {
                 const end = Math.min(start + CHUNK_SIZE, total);
-                const batch = clients.slice(start, end);
+                const batch = toGenerate.slice(start, end);
                 const results = await Promise.all(
                     batch.map(async (c) => {
                         const pdfData = clientToPdfData(c);
@@ -311,7 +325,7 @@ export const Clients = () => {
                                             </button>
                                         )}
                                         <div className="d-flex align-items-center gap-2">
-                                            <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || clients.length === 0} title="Générer les contrats de la page en archive(s) ZIP">
+                                            <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || filteredClients.length === 0} title="Générer les contrats des clients visibles en archive(s) ZIP">
                                                 <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
                                                 {generatingAll ? (
                                                     <span className="ms-1">{generateProgress ? `Génération PDF ${generateProgress.current.toLocaleString('fr-FR')} / ${generateProgress.total.toLocaleString('fr-FR')}...` : 'Génération...'}</span>
@@ -323,6 +337,21 @@ export const Clients = () => {
                                     </div>
                                 </div>
                                 <div className="card-body">
+                                    {!loading && (
+                                        <div className="mb-3">
+                                            <input
+                                                type="search"
+                                                className="form-control"
+                                                placeholder="Rechercher par prénom, nom, n° carte ou type de contrat..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                aria-label="Rechercher dans le tableau"
+                                            />
+                                            {searchTerm.trim() && (
+                                                <span className="text-muted small mt-1 d-block">{filteredClients.length} résultat(s) sur cette page</span>
+                                            )}
+                                        </div>
+                                    )}
                                     {loading ? (
                                         <div className="text-center py-4"><Loader /></div>
                                     ) : (
@@ -331,7 +360,7 @@ export const Clients = () => {
                                                 <thead>
                                                     <tr>
                                                         <th style={{ width: 44 }}>
-                                                            <input type="checkbox" className="form-check-input" checked={clients.length > 0 && selectedIds.length === clients.length} onChange={toggleSelectAll} aria-label="Tout sélectionner" title="Tout sélectionner" />
+                                                            <input type="checkbox" className="form-check-input" checked={filteredClients.length > 0 && selectedIds.length === filteredClients.length} onChange={toggleSelectAll} aria-label="Tout sélectionner" title="Tout sélectionner" />
                                                         </th>
                                                         <th>Prénoms</th>
                                                         <th>Nom</th>
@@ -343,8 +372,10 @@ export const Clients = () => {
                                                 <tbody>
                                                     {clients.length === 0 ? (
                                                         <tr><td colSpan="6" className="text-center text-muted">Aucun client</td></tr>
+                                                    ) : filteredClients.length === 0 ? (
+                                                        <tr><td colSpan="6" className="text-center text-muted">Aucun résultat pour « {searchTerm.trim()} »</td></tr>
                                                     ) : (
-                                                        clients.map((c) => (
+                                                        filteredClients.map((c) => (
                                                             <tr key={c.id}>
                                                                 <td>
                                                                     <input type="checkbox" className="form-check-input" checked={selectedIds.includes(c.id)} onChange={() => toggleSelect(c.id)} aria-label={`Sélectionner ${c.prenomClient} ${c.nomClient}`} />

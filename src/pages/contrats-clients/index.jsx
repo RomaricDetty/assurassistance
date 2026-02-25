@@ -35,6 +35,36 @@ const getDuplicateMessage = (res) => {
     return 'Ce client existe déjà.';
 };
 
+/** Normalise le type de contrat (Excel ou API) vers Business, Premier ou Platinum. */
+const normalizeTypeContrat = (raw) => {
+    const s = String(raw ?? '').trim();
+    const lower = s.toLowerCase();
+    if (lower === 'premier') return 'Premier';
+    if (lower === 'platinum') return 'Platinum';
+    return 'Business';
+};
+
+/** Construit l’objet attendu par fillPdfContrat à partir d’un item (API ou payload). */
+const itemToPdfData = (c) => ({
+    prenom: c.prenomClient ?? c.prenom ?? '',
+    nom: c.nomClient ?? c.nom ?? '',
+    idCarte: c.idCarteBancaire ?? c.idCarte ?? '',
+    typeContrat: normalizeTypeContrat(c.typeContrat)
+});
+
+/** Génère un nom de fichier unique dans un set (évite doublons dans le ZIP). */
+const nextUniqueFileName = (baseFileName, usedNames) => {
+    let fileName = baseFileName;
+    while (usedNames.has(fileName)) {
+        const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
+        const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
+        const num = match ? parseInt(match[2], 10) + 1 : 1;
+        fileName = `${base}_${num}.pdf`;
+    }
+    usedNames.add(fileName);
+    return fileName;
+};
+
 /**
  * Page Contrats clients : formulaire pour pré-remplir un PDF par type de contrat,
  * téléchargement du fichier renommé, ou import Excel pour génération en lot.
@@ -70,7 +100,7 @@ export const ContratsClients = () => {
         prenom: formData.prenom || '',
         nom: formData.nom || '',
         idCarte: formData.idCarte || '',
-        typeContrat: formData.typeContrat
+        typeContrat: normalizeTypeContrat(formData.typeContrat)
     });
 
     /** Liste les noms des champs du PDF sélectionné (diagnostic). */
@@ -122,7 +152,7 @@ export const ContratsClients = () => {
                 nomClient: formData.nom?.trim() || '',
                 prenomClient: formData.prenom?.trim() || '',
                 idCarteBancaire: formData.idCarte?.trim() || '',
-                typeContrat: formData.typeContrat || 'Business'
+                typeContrat: normalizeTypeContrat(formData.typeContrat)
             };
             const createRes = await createClient(token, payload);
             if (!createRes.data && !createRes.success) {
@@ -130,7 +160,7 @@ export const ContratsClients = () => {
                 sendToastError(msg);
                 return;
             }
-            const url = getTemplateUrl(formData.typeContrat);
+            const url = getTemplateUrl(normalizeTypeContrat(formData.typeContrat));
             const res = await fetch(url);
             if (!res.ok) throw new Error('Template PDF introuvable');
             const buffer = await res.arrayBuffer();
@@ -174,8 +204,8 @@ export const ContratsClients = () => {
                         const prenom = prenomIdx >= 0 ? String(row[prenomIdx] ?? '').trim() : '';
                         const nom = nomIdx >= 0 ? String(row[nomIdx] ?? '').trim() : '';
                         const idCarte = idCarteIdx >= 0 ? String(row[idCarteIdx] ?? '').trim() : '';
-                        const typeContrat = typeIdx >= 0 ? String(row[typeIdx] ?? '').trim() : 'Business';
-                        list.push({ prenom, nom, idCarte, typeContrat: typeContrat || 'Business' });
+                        const typeContrat = normalizeTypeContrat(typeIdx >= 0 ? row[typeIdx] : '');
+                        list.push({ prenom, nom, idCarte, typeContrat });
                     }
                     resolve(list);
                 } catch (err) {
@@ -214,7 +244,7 @@ export const ContratsClients = () => {
                 nomClient: r.nom || '',
                 prenomClient: r.prenom || '',
                 idCarteBancaire: r.idCarte || '',
-                typeContrat: r.typeContrat || 'Business'
+                typeContrat: normalizeTypeContrat(r.typeContrat)
             }));
         const totalProcessed = payloads.length;
         if (totalProcessed === 0) {
@@ -224,14 +254,16 @@ export const ContratsClients = () => {
         }
         setLoadingExcel(true);
         try {
+            /** — Étape 1 : enregistrement en base (obligatoire avant toute génération PDF). */
+            setExcelProgress({ phase: 'upload', current: 0, total: totalProcessed });
             const bulkRes = await createClientsBulk(token, payloads);
             const meta = bulkRes.meta || {};
             const data = bulkRes.data || bulkRes;
             const created = Array.isArray(data.created) ? data.created : Array.isArray(data) ? data : [];
             const totalCreated = meta.totalCreated ?? created.length;
             const duplicateCount = meta.conflictsCount ?? data.duplicateCount ?? data.duplicates ?? 0;
-            const errors = data.errors || [];
-            const firstOtherErrorMessage = errors[0]?.message || (bulkRes.success === false ? bulkRes.message : null);
+            const apiErrors = data.errors || [];
+            const firstOtherErrorMessage = apiErrors[0]?.message || (bulkRes.success === false ? bulkRes.message : null);
 
             if (bulkRes.success === false && totalCreated === 0 && !firstOtherErrorMessage) {
                 sendToastError(bulkRes.message || 'Erreur lors de la création en masse');
@@ -239,9 +271,14 @@ export const ContratsClients = () => {
                 return;
             }
 
-            /** Liste pour les PDF : API renvoie la liste si ≤1000, sinon on utilise les payloads (meta.dataTruncated). */
+            /** Liste pour les PDF (Business, Premier, Platinum) : réponses API si dispo, sinon payloads déjà normalisés. */
             const toGenerate = created.length > 0
-                ? created
+                ? created.map((c) => ({
+                    prenomClient: c.prenomClient ?? c.prenom,
+                    nomClient: c.nomClient ?? c.nom,
+                    idCarteBancaire: c.idCarteBancaire ?? c.idCarte,
+                    typeContrat: normalizeTypeContrat(c.typeContrat)
+                }))
                 : payloads.map((p) => ({
                     prenomClient: p.prenomClient,
                     nomClient: p.nomClient,
@@ -259,6 +296,7 @@ export const ContratsClients = () => {
                 sendToastError(firstOtherErrorMessage);
             }
 
+            /** — Étape 2 : génération des PDF uniquement après enregistrement en base (types : Business, Premier, Platinum). */
             if (toGenerate.length > 0) {
                 const total = toGenerate.length;
                 /**
@@ -267,11 +305,11 @@ export const ContratsClients = () => {
                  */
                 const CHUNK_SIZE =
                     total <= 500 ? 500
-                    : total <= 2000 ? 200
-                    : total <= 5000 ? 200
-                    : total <= 15000 ? 150
-                    : 100;
-                const MAX_PDF_PER_ZIP = 1000;
+                    : total <= 2000 ? 500
+                    : total <= 5000 ? 500
+                    : total <= 15000 ? 500
+                    : 300;
+                const MAX_PDF_PER_ZIP = 2500;
                 const usedNames = new Set();
                 const zipBlobs = [];
                 let zip = new JSZip();
@@ -292,12 +330,7 @@ export const ContratsClients = () => {
                     const batch = toGenerate.slice(start, end);
                     const results = await Promise.all(
                         batch.map(async (c) => {
-                            const pdfData = {
-                                prenom: c.prenomClient ?? c.prenom ?? '',
-                                nom: c.nomClient ?? c.nom ?? '',
-                                idCarte: c.idCarteBancaire ?? c.idCarte ?? '',
-                                typeContrat: c.typeContrat ?? 'Business'
-                            };
+                            const pdfData = itemToPdfData(c);
                             const templateBuf = templateCache.get(pdfData.typeContrat);
                             if (!templateBuf) return null;
                             const bufferCopy = templateBuf.slice(0);
@@ -309,16 +342,10 @@ export const ContratsClients = () => {
                             }
                         })
                     );
+
                     for (const item of results) {
                         if (!item) continue;
-                        let fileName = getContratFileName(item.pdfData);
-                        while (usedNames.has(fileName)) {
-                            const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
-                            const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
-                            const num = match ? parseInt(match[2], 10) + 1 : 1;
-                            fileName = `${base}_${num}.pdf`;
-                        }
-                        usedNames.add(fileName);
+                        const fileName = nextUniqueFileName(getContratFileName(item.pdfData), usedNames);
                         zip.file(fileName, item.filled, { binary: true });
                         countInZip++;
                         if (countInZip >= MAX_PDF_PER_ZIP) {
@@ -466,12 +493,14 @@ export const ContratsClients = () => {
                                     {loadingExcel && (
                                         <div className="position-absolute top-0 start-0 end-0 bottom-0 d-flex flex-column align-items-center justify-content-center rounded bg-white bg-opacity-50" style={{ zIndex: 5 }}>
                                             <Loader />
-                                            <span className="mt-2 text-muted small">
-                                                {excelProgress?.phase === 'pdf'
-                                                    ? `Génération PDF ${excelProgress.current.toLocaleString('fr-FR')} / ${excelProgress.total.toLocaleString('fr-FR')}...`
-                                                    : excelProgress?.phase === 'zip'
-                                                        ? 'Création de l\'archive...'
-                                                        : 'Enregistrement et génération en cours...'}
+                                            <span className="mt-3 mb-3 text-muted small">
+                                                {excelProgress?.phase === 'upload'
+                                                    ? `Enregistrement des clients (API bulk)...`
+                                                    : excelProgress?.phase === 'pdf'
+                                                        ? `Génération PDF ${excelProgress.current.toLocaleString('fr-FR')} / ${excelProgress.total.toLocaleString('fr-FR')}...`
+                                                        : excelProgress?.phase === 'zip'
+                                                            ? 'Création de l\'archive...'
+                                                            : 'En cours...'}
                                             </span>
                                         </div>
                                     )}
