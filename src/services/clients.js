@@ -1,4 +1,4 @@
-import { CREATE_CLIENT_URL, LIST_CLIENTS_URL, getClientUrl } from '../config/urls/clients';
+import { CREATE_CLIENT_URL, BULK_CREATE_CLIENTS_URL, LIST_CLIENTS_URL, getClientUrl } from '../config/urls/clients';
 import { authHeaders } from './administrateurs';
 
 /**
@@ -9,6 +9,19 @@ export const createClient = async (token, payload) => {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify(payload)
+    });
+    return res.json();
+};
+
+/**
+ * Crée plusieurs clients en une requête. Body : array de { nomClient, prenomClient, idCarteBancaire, typeContrat }.
+ * Réponse attendue : { data: { created: [...], duplicateCount?: number, errors?: [...] }, success }.
+ */
+export const createClientsBulk = async (token, clientsArray) => {
+    const res = await fetch(BULK_CREATE_CLIENTS_URL, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify(clientsArray)
     });
     return res.json();
 };

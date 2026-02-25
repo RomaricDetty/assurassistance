@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
-import { createClient } from '../../services/clients';
+import { createClient, createClientsBulk } from '../../services/clients';
 import {
     TYPES_CONTRAT,
     getTemplateUrl,
@@ -44,6 +44,8 @@ export const ContratsClients = () => {
     const [formData, setFormData] = useState(INITIAL_FORM);
     const [loading, setLoading] = useState(false);
     const [loadingExcel, setLoadingExcel] = useState(false);
+    /** Progression affichée pendant l'import Excel : { phase, current, total }. */
+    const [excelProgress, setExcelProgress] = useState(null);
     const [errors, setErrors] = useState({});
     const [pdfFieldNames, setPdfFieldNames] = useState(null);
     const [loadingFields, setLoadingFields] = useState(false);
@@ -186,9 +188,8 @@ export const ContratsClients = () => {
     };
 
     /**
-     * Pour chaque ligne Excel : enregistre le client via l'API, génère le PDF en mémoire,
-     * puis regroupe tous les PDF dans une archive ZIP et déclenche un seul téléchargement
-     * (évite le blocage des navigateurs sur les téléchargements multiples).
+     * Envoie les lignes Excel à l'API bulk, puis génère les PDF pour les clients créés
+     * et les regroupe dans une archive ZIP (un seul téléchargement).
      */
     const handleExcelUpload = async (e) => {
         const file = e.target.files?.[0];
@@ -207,64 +208,152 @@ export const ContratsClients = () => {
             e.target.value = '';
             return;
         }
-        const totalProcessed = list.filter((r) => r.nom || r.prenom).length;
+        const payloads = list
+            .filter((r) => r.nom || r.prenom)
+            .map((r) => ({
+                nomClient: r.nom || '',
+                prenomClient: r.prenom || '',
+                idCarteBancaire: r.idCarte || '',
+                typeContrat: r.typeContrat || 'Business'
+            }));
+        const totalProcessed = payloads.length;
+        if (totalProcessed === 0) {
+            sendToastError('Aucune ligne valide à envoyer');
+            e.target.value = '';
+            return;
+        }
         setLoadingExcel(true);
         try {
-            const zip = new JSZip();
-            const usedNames = new Set();
-            let saved = 0;
-            let duplicateCount = 0;
-            let firstOtherErrorMessage = null;
-            for (let i = 0; i < list.length; i++) {
-                const data = list[i];
-                if (!data.nom && !data.prenom) continue;
-                const payload = {
-                    nomClient: data.nom || '',
-                    prenomClient: data.prenom || '',
-                    idCarteBancaire: data.idCarte || '',
-                    typeContrat: data.typeContrat || 'Business'
-                };
-                const createRes = await createClient(token, payload);
-                if (!createRes.data && !createRes.success) {
-                    if (isDuplicateError(createRes)) {
-                        duplicateCount++;
-                    } else {
-                        if (!firstOtherErrorMessage) firstOtherErrorMessage = createRes.message || 'Erreur enregistrement';
-                    }
-                    continue;
-                }
-                saved++;
-                const url = getTemplateUrl(data.typeContrat);
-                const res = await fetch(url);
-                if (!res.ok) continue;
-                const buffer = await res.arrayBuffer();
-                const filled = await fillPdfContrat(buffer, data);
-                let fileName = getContratFileName(data);
-                while (usedNames.has(fileName)) {
-                    const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
-                    const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
-                    const num = match ? parseInt(match[2], 10) + 1 : 1;
-                    fileName = `${base}_${num}.pdf`;
-                }
-                usedNames.add(fileName);
-                zip.file(fileName, filled, { binary: true });
+            const bulkRes = await createClientsBulk(token, payloads);
+            const meta = bulkRes.meta || {};
+            const data = bulkRes.data || bulkRes;
+            const created = Array.isArray(data.created) ? data.created : Array.isArray(data) ? data : [];
+            const totalCreated = meta.totalCreated ?? created.length;
+            const duplicateCount = meta.conflictsCount ?? data.duplicateCount ?? data.duplicates ?? 0;
+            const errors = data.errors || [];
+            const firstOtherErrorMessage = errors[0]?.message || (bulkRes.success === false ? bulkRes.message : null);
+
+            if (bulkRes.success === false && totalCreated === 0 && !firstOtherErrorMessage) {
+                sendToastError(bulkRes.message || 'Erreur lors de la création en masse');
+                e.target.value = '';
+                return;
+            }
+
+            /** Liste pour les PDF : API renvoie la liste si ≤1000, sinon on utilise les payloads (meta.dataTruncated). */
+            const toGenerate = created.length > 0
+                ? created
+                : payloads.map((p) => ({
+                    prenomClient: p.prenomClient,
+                    nomClient: p.nomClient,
+                    idCarteBancaire: p.idCarteBancaire,
+                    typeContrat: p.typeContrat
+                }));
+
+            if (meta.dataTruncated && meta.messageDetail) {
+                sendToastSuccess(meta.messageDetail);
             }
             if (duplicateCount > 0) {
-                sendToastError(`${duplicateCount} des ${totalProcessed} donnée(s) existent déjà.`);
+                sendToastError(`${duplicateCount} des ${totalProcessed} donnée(s) en conflit ou existent déjà.`);
             }
-            if (firstOtherErrorMessage) {
+            if (firstOtherErrorMessage && toGenerate.length === 0 && duplicateCount === 0) {
                 sendToastError(firstOtherErrorMessage);
             }
-            if (saved > 0) {
-                const zipBlob = await zip.generateAsync({ type: 'blob' });
-                downloadBlob(zipBlob, 'contrats_clients.zip');
-                sendToastSuccess(`${saved} client(s) enregistré(s), archive téléchargée`);
+
+            if (toGenerate.length > 0) {
+                const total = toGenerate.length;
+                /**
+                 * Taille d’un sous-lot (parallèle) : plus le total est grand, plus le sous-lot est petit
+                 * pour que la progression s’affiche régulièrement (évite de rester bloqué à « 0 / 15 001 »).
+                 */
+                const CHUNK_SIZE =
+                    total <= 500 ? 500
+                    : total <= 2000 ? 200
+                    : total <= 5000 ? 200
+                    : total <= 15000 ? 150
+                    : 100;
+                const MAX_PDF_PER_ZIP = 1000;
+                const usedNames = new Set();
+                const zipBlobs = [];
+                let zip = new JSZip();
+                let countInZip = 0;
+
+                /** Chargement unique des 3 templates (évite 15 000 requêtes réseau). */
+                setExcelProgress({ phase: 'pdf', current: 0, total });
+                const templateCache = new Map();
+                for (const t of TYPES_CONTRAT) {
+                    try {
+                        const res = await fetch(getTemplateUrl(t.value));
+                        if (res.ok) templateCache.set(t.value, await res.arrayBuffer());
+                    } catch (_) { /* ignorer */ }
+                }
+
+                for (let start = 0; start < total; start += CHUNK_SIZE) {
+                    const end = Math.min(start + CHUNK_SIZE, total);
+                    const batch = toGenerate.slice(start, end);
+                    const results = await Promise.all(
+                        batch.map(async (c) => {
+                            const pdfData = {
+                                prenom: c.prenomClient ?? c.prenom ?? '',
+                                nom: c.nomClient ?? c.nom ?? '',
+                                idCarte: c.idCarteBancaire ?? c.idCarte ?? '',
+                                typeContrat: c.typeContrat ?? 'Business'
+                            };
+                            const templateBuf = templateCache.get(pdfData.typeContrat);
+                            if (!templateBuf) return null;
+                            const bufferCopy = templateBuf.slice(0);
+                            try {
+                                const filled = await fillPdfContrat(bufferCopy, pdfData);
+                                return { pdfData, filled };
+                            } catch (_) {
+                                return null;
+                            }
+                        })
+                    );
+                    for (const item of results) {
+                        if (!item) continue;
+                        let fileName = getContratFileName(item.pdfData);
+                        while (usedNames.has(fileName)) {
+                            const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
+                            const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
+                            const num = match ? parseInt(match[2], 10) + 1 : 1;
+                            fileName = `${base}_${num}.pdf`;
+                        }
+                        usedNames.add(fileName);
+                        zip.file(fileName, item.filled, { binary: true });
+                        countInZip++;
+                        if (countInZip >= MAX_PDF_PER_ZIP) {
+                            setExcelProgress({ phase: 'zip', current: end, total });
+                            zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
+                            zip = new JSZip();
+                            countInZip = 0;
+                            await new Promise((r) => setTimeout(r, 0));
+                        }
+                    }
+                    setExcelProgress({ phase: 'pdf', current: end, total });
+                    await new Promise((r) => setTimeout(r, 0));
+                }
+                if (countInZip > 0) {
+                    setExcelProgress({ phase: 'zip', current: total, total });
+                    zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
+                }
+                setExcelProgress(null);
+                for (let z = 0; z < zipBlobs.length; z++) {
+                    downloadBlob(zipBlobs[z], zipBlobs.length > 1 ? `contrats_clients_${z + 1}.zip` : 'contrats_clients.zip');
+                    if (z < zipBlobs.length - 1) await new Promise((r) => setTimeout(r, 300));
+                }
+                sendToastSuccess(zipBlobs.length > 1
+                    ? `${toGenerate.length} client(s) enregistré(s), ${zipBlobs.length} archive(s) téléchargée(s)`
+                    : `${toGenerate.length} client(s) enregistré(s), archive téléchargée`);
             } else if (duplicateCount === 0 && !firstOtherErrorMessage) {
                 sendToastError('Aucun client enregistré');
+            }
+            if (firstOtherErrorMessage && toGenerate.length > 0) {
+                sendToastError(firstOtherErrorMessage);
             }
         } catch (err) {
             sendToastError(err.message || 'Erreur lors de la génération');
         } finally {
+            setExcelProgress(null);
             setLoadingExcel(false);
             e.target.value = '';
         }
@@ -377,7 +466,13 @@ export const ContratsClients = () => {
                                     {loadingExcel && (
                                         <div className="position-absolute top-0 start-0 end-0 bottom-0 d-flex flex-column align-items-center justify-content-center rounded bg-white bg-opacity-50" style={{ zIndex: 5 }}>
                                             <Loader />
-                                            <span className="mt-2 text-muted small">Enregistrement et génération en cours...</span>
+                                            <span className="mt-2 text-muted small">
+                                                {excelProgress?.phase === 'pdf'
+                                                    ? `Génération PDF ${excelProgress.current.toLocaleString('fr-FR')} / ${excelProgress.total.toLocaleString('fr-FR')}...`
+                                                    : excelProgress?.phase === 'zip'
+                                                        ? 'Création de l\'archive...'
+                                                        : 'Enregistrement et génération en cours...'}
+                                            </span>
                                         </div>
                                     )}
                                     <p className="text-muted small mb-2">

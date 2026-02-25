@@ -4,7 +4,7 @@ import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
 import { listClients, updateClient, deleteClient } from '../../services/clients';
-import { getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob } from '../../utils/pdfContrat';
+import { TYPES_CONTRAT, getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob } from '../../utils/pdfContrat';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import JSZip from 'jszip';
 
@@ -31,11 +31,15 @@ export const Clients = () => {
     const [saving, setSaving] = useState(false);
     const [generatingId, setGeneratingId] = useState(null);
     const [generatingAll, setGeneratingAll] = useState(false);
+    /** Progression génération PDF : { current, total }. */
+    const [generateProgress, setGenerateProgress] = useState(null);
     const [clientToDelete, setClientToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
     const [selectedIds, setSelectedIds] = useState([]);
     const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
     const [deletingBulk, setDeletingBulk] = useState(false);
+    /** Progression suppression en masse : { current, total }. */
+    const [deleteBulkProgress, setDeleteBulkProgress] = useState(null);
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(DEFAULT_LIMIT);
     const [total, setTotal] = useState(0);
@@ -81,15 +85,24 @@ export const Clients = () => {
         setSelectedIds(allSelected ? [] : clients.map((c) => c.id));
     };
 
-    /** Supprime en masse les clients sélectionnés après confirmation. */
+    /** Supprime en masse les clients sélectionnés (par lots pour garder l’UI réactive : 100, 500, 1000…). */
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
+        const ids = [...selectedIds];
+        const total = ids.length;
+        const DELETE_CHUNK = 50;
         setDeletingBulk(true);
+        setDeleteBulkProgress({ current: 0, total });
         let done = 0;
         try {
-            for (const id of selectedIds) {
-                const res = await deleteClient(token, id);
-                if (res.success !== false && (res.data != null || res.message === undefined)) done++;
+            for (let start = 0; start < total; start += DELETE_CHUNK) {
+                const chunk = ids.slice(start, start + DELETE_CHUNK);
+                for (const id of chunk) {
+                    const res = await deleteClient(token, id);
+                    if (res.success !== false && (res.data != null || res.message === undefined)) done++;
+                }
+                setDeleteBulkProgress({ current: Math.min(start + DELETE_CHUNK, total), total });
+                await new Promise((r) => setTimeout(r, 0));
             }
             sendToastSuccess(`${done} client(s) supprimé(s)`);
             setSelectedIds([]);
@@ -98,6 +111,7 @@ export const Clients = () => {
         } catch (err) {
             sendToastError('Erreur lors de la suppression');
         } finally {
+            setDeleteBulkProgress(null);
             setDeletingBulk(false);
         }
     };
@@ -158,45 +172,93 @@ export const Clients = () => {
         }
     };
 
-    /** Génère les PDF de la page courante et les regroupe dans une archive ZIP (un seul téléchargement). */
+    /** Génère les PDF de la page courante (même méthode que Contrats clients : cache templates, lots en parallèle, ZIP multiples). */
     const handleGenerateAll = async () => {
         if (clients.length === 0) {
             sendToastError('Aucun client à traiter');
             return;
         }
+        const total = clients.length;
+        const CHUNK_SIZE =
+            total <= 500 ? 500
+            : total <= 2000 ? 200
+            : total <= 5000 ? 200
+            : total <= 15000 ? 150
+            : 100;
+        const MAX_PDF_PER_ZIP = 1000;
         setGeneratingAll(true);
+        setGenerateProgress({ current: 0, total });
         try {
-            const zip = new JSZip();
-            const usedNames = new Set();
-            let count = 0;
-            for (const client of clients) {
-                const url = getTemplateUrl(client.typeContrat || 'Business');
-                const res = await fetch(url);
-                if (!res.ok) continue;
-                const buffer = await res.arrayBuffer();
-                const data = clientToPdfData(client);
-                const filled = await fillPdfContrat(buffer, data);
-                let fileName = getContratFileName(data);
-                while (usedNames.has(fileName)) {
-                    const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
-                    const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
-                    const num = match ? parseInt(match[2], 10) + 1 : 1;
-                    fileName = `${base}_${num}.pdf`;
-                }
-                usedNames.add(fileName);
-                zip.file(fileName, filled, { binary: true });
-                count++;
+            const templateCache = new Map();
+            for (const t of TYPES_CONTRAT) {
+                try {
+                    const res = await fetch(getTemplateUrl(t.value));
+                    if (res.ok) templateCache.set(t.value, await res.arrayBuffer());
+                } catch (_) { /* ignorer */ }
             }
+            const usedNames = new Set();
+            const zipBlobs = [];
+            let zip = new JSZip();
+            let countInZip = 0;
+            for (let start = 0; start < total; start += CHUNK_SIZE) {
+                const end = Math.min(start + CHUNK_SIZE, total);
+                const batch = clients.slice(start, end);
+                const results = await Promise.all(
+                    batch.map(async (c) => {
+                        const pdfData = clientToPdfData(c);
+                        const templateBuf = templateCache.get(pdfData.typeContrat);
+                        if (!templateBuf) return null;
+                        const bufferCopy = templateBuf.slice(0);
+                        try {
+                            const filled = await fillPdfContrat(bufferCopy, pdfData);
+                            return { pdfData, filled };
+                        } catch (_) {
+                            return null;
+                        }
+                    })
+                );
+                for (const item of results) {
+                    if (!item) continue;
+                    let fileName = getContratFileName(item.pdfData);
+                    while (usedNames.has(fileName)) {
+                        const match = fileName.match(/^(.*)_(\d+)\.pdf$/i);
+                        const base = match ? match[1] : fileName.replace(/\.pdf$/i, '');
+                        const num = match ? parseInt(match[2], 10) + 1 : 1;
+                        fileName = `${base}_${num}.pdf`;
+                    }
+                    usedNames.add(fileName);
+                    zip.file(fileName, item.filled, { binary: true });
+                    countInZip++;
+                    if (countInZip >= MAX_PDF_PER_ZIP) {
+                        setGenerateProgress({ current: end, total });
+                        zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
+                        zip = new JSZip();
+                        countInZip = 0;
+                        await new Promise((r) => setTimeout(r, 0));
+                    }
+                }
+                setGenerateProgress({ current: end, total });
+                await new Promise((r) => setTimeout(r, 0));
+            }
+            if (countInZip > 0) {
+                zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
+            }
+            const count = usedNames.size;
             if (count === 0) {
                 sendToastError('Aucun contrat généré');
                 return;
             }
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            downloadBlob(zipBlob, 'contrats_clients.zip');
-            sendToastSuccess(`${count} contrat(s) dans l'archive téléchargée`);
+            for (let z = 0; z < zipBlobs.length; z++) {
+                downloadBlob(zipBlobs[z], zipBlobs.length > 1 ? `contrats_clients_${z + 1}.zip` : 'contrats_clients.zip');
+                if (z < zipBlobs.length - 1) await new Promise((r) => setTimeout(r, 300));
+            }
+            sendToastSuccess(zipBlobs.length > 1
+                ? `${count} contrat(s), ${zipBlobs.length} archive(s) téléchargée(s)`
+                : `${count} contrat(s) dans l'archive téléchargée`);
         } catch (err) {
             sendToastError(err.message || 'Erreur génération');
         } finally {
+            setGenerateProgress(null);
             setGeneratingAll(false);
         }
     };
@@ -248,10 +310,16 @@ export const Clients = () => {
                                                 <span className="ms-1">Supprimer ({selectedIds.length})</span>
                                             </button>
                                         )}
-                                        <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || clients.length === 0} title="Générer les contrats de la page en une archive ZIP">
-                                            <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
-                                            {generatingAll ? <span className="ms-1">Génération...</span> : <span className="ms-1">Générer contrats (ZIP)</span>}
-                                        </button>
+                                        <div className="d-flex align-items-center gap-2">
+                                            <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || clients.length === 0} title="Générer les contrats de la page en archive(s) ZIP">
+                                                <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
+                                                {generatingAll ? (
+                                                    <span className="ms-1">{generateProgress ? `Génération PDF ${generateProgress.current.toLocaleString('fr-FR')} / ${generateProgress.total.toLocaleString('fr-FR')}...` : 'Génération...'}</span>
+                                                ) : (
+                                                    <span className="ms-1">Générer contrats (ZIP)</span>
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="card-body">
@@ -314,6 +382,9 @@ export const Clients = () => {
                                                     <option value={25}>25</option>
                                                     <option value={50}>50</option>
                                                     <option value={100}>100</option>
+                                                    <option value={200}>200</option>
+                                                    <option value={500}>500</option>
+                                                    <option value={1000}>1000</option>
                                                 </select>
                                                 <span className="text-muted small">{total} client(s) au total</span>
                                             </div>
@@ -417,9 +488,12 @@ export const Clients = () => {
                             </div>
                             <div className="modal-body">
                                 <p className="mb-0">Supprimer <strong>{selectedIds.length} client(s)</strong> ? Cette action est irréversible.</p>
+                                {deleteBulkProgress && (
+                                    <p className="mb-0 mt-2 text-muted small">Suppression {deleteBulkProgress.current.toLocaleString('fr-FR')} / {deleteBulkProgress.total.toLocaleString('fr-FR')}...</p>
+                                )}
                             </div>
                             <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setShowBulkDeleteModal(false)}>Annuler</button>
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowBulkDeleteModal(false)} disabled={deletingBulk}>Annuler</button>
                                 <button type="button" className="btn btn-danger" onClick={handleBulkDelete} disabled={deletingBulk}>{deletingBulk ? 'Suppression...' : 'Supprimer'}</button>
                             </div>
                         </div>
