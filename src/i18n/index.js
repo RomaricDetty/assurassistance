@@ -92,6 +92,9 @@ const messages = {
             passwordHint: '(leave empty to keep unchanged)'
             ,
             actions: 'Actions',
+            role: 'Role',
+            roleSuperAdmin: 'Super admin',
+            roleAgent: 'Agent',
             perPage: 'Per page',
             login: 'Login',
             email: 'Email',
@@ -362,6 +365,9 @@ const messages = {
             passwordHint: '(laisser vide pour ne pas modifier)'
             ,
             actions: 'Actions',
+            role: 'Rôle',
+            roleSuperAdmin: 'Super admin',
+            roleAgent: 'Agent',
             perPage: 'Par page',
             login: 'Login',
             email: 'Email',

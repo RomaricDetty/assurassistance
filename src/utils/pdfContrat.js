@@ -169,11 +169,12 @@ function drawTextOverlay(doc, data) {
         const isMultiLineField = key === 'prenom' || key === 'nom';
 
         if (isMultiLineField) {
-            const lines = splitTextInTwoLines(value, maxLen);
+            const lines = splitTextInTwoLines(value, maxLen).slice(0, 2);
+            const startY = lines.length > 1 ? pos.y : 705;
             lines.forEach((line, index) => {
                 page.drawText(line, {
                     x: pos.x,
-                    y: pos.y - (index * SECOND_LINE_Y_OFFSET),
+                    y: startY - (index * SECOND_LINE_Y_OFFSET),
                     size: FONT_SIZE,
                     font
                 });

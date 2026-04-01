@@ -42,6 +42,12 @@ export const Administration = () => {
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
+    /** Retourne un libellé de rôle localisé à partir de la valeur API. */
+    const getRoleLabel = (role) => {
+        const normalizedRole = String(role || 'SUPER_ADMIN').toUpperCase();
+        return normalizedRole === 'AGENT' ? t('administration.roleAgent') : t('administration.roleSuperAdmin');
+    };
+
     const fetchList = async (pageNum = page, limitNum = limit) => {
         if (!token) return;
         setLoading(true);
@@ -201,13 +207,14 @@ export const Administration = () => {
                                                         <th>{t('administration.lastName')}</th>
                                                         <th>{t('administration.firstName')}</th>
                                                         <th>{t('administration.email')}</th>
+                                                        <th>{t('administration.role')}</th>
                                                         <th>{t('administration.active')}</th>
                                                         <th width="100">{t('administration.actions')}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {admins.length === 0 ? (
-                                                        <tr><td colSpan="6" className="text-center text-muted">{t('administration.noAdmin')}</td></tr>
+                                                        <tr><td colSpan="7" className="text-center text-muted">{t('administration.noAdmin')}</td></tr>
                                                     ) : (
                                                         admins.map((a) => (
                                                             <tr key={a.id}>
@@ -215,6 +222,11 @@ export const Administration = () => {
                                                                 <td>{a.nom}</td>
                                                                 <td>{a.prenom}</td>
                                                                 <td>{a.email}</td>
+                                                                <td>
+                                                                    <span className={`badge ${String(a.role || 'SUPER_ADMIN').toUpperCase() === 'AGENT' ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary'}`}>
+                                                                        {getRoleLabel(a.role)}
+                                                                    </span>
+                                                                </td>
                                                                 <td>{a.isActive ? t('administration.yes') : t('administration.no')}</td>
                                                                 <td>
                                                                     <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEdit(a.id)}>
