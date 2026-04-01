@@ -1,10 +1,23 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router';
+import { useSelector } from 'react-redux';
 import LogoMark from '../../assets/images/logo_mark.png';
 import './sidebar.css';
+import { useI18n } from '../../i18n';
 
 export const Sidebar = ({ isOpen }) => {
+    const { t } = useI18n();
     const location = useLocation();
+    const administrateur = useSelector((s) => s.auth.administrateur);
+    const role = useSelector((s) => s.auth.role);
+    const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN';
+    const links = administrateur?.interfaceLinks;
+    /** Indique si un item de menu est autorisé pour l'utilisateur courant. */
+    const canAccess = (path) => {
+        if (isSuperAdmin) return true;
+        if (!Array.isArray(links) || links.length === 0) return true;
+        return links.includes(path);
+    };
 
     // Fonction pour vérifier si le lien est actif
     const isActive = (path) => {
@@ -39,47 +52,57 @@ export const Sidebar = ({ isOpen }) => {
                     <div className="d-flex align-items-start flex-column w-100">
                         {/* Navigation */}
                         <ul className="navbar-nav mb-auto w-100">
-                            <li className="nav-item">
+                            {canAccess('/') && <li className="nav-item">
                                 <Link
                                     className={`nav-link ${isActive('/') ? 'active' : ''}`}
                                     to="/"
-                                    title="Tableau de bord"
+                                    title={t('menu.dashboard')}
                                 >
                                     <i className="iconoir-report-columns menu-icon"></i>
-                                    <span className={isOpen ? '' : 'd-none'}>Tableau de bord</span>
+                                    <span className={isOpen ? '' : 'd-none'}>{t('menu.dashboard')}</span>
                                 </Link>
-                            </li>
+                            </li>}
                             
-                            <li className="nav-item">
+                            {canAccess('/contrats-clients') && <li className="nav-item">
                                 <Link
                                     className={`nav-link ${isActive('/contrats-clients') ? 'active' : ''}`}
                                     to="/contrats-clients"
-                                    title="Contrats clients"
+                                    title={t('menu.contractsClients')}
                                 >
                                     <i className="iconoir-page menu-icon"></i>
-                                    <span className={isOpen ? '' : 'd-none'}>Contrats clients</span>
+                                    <span className={isOpen ? '' : 'd-none'}>{t('menu.contractsClients')}</span>
                                 </Link>
-                            </li>
-                            <li className="nav-item">
+                            </li>}
+                            {canAccess('/clients') && <li className="nav-item">
                                 <Link
                                     className={`nav-link ${isActive('/clients') ? 'active' : ''}`}
                                     to="/clients"
-                                    title="Clients"
+                                    title={t('menu.clients')}
                                 >
                                     <i className="iconoir-community menu-icon"></i>
-                                    <span className={isOpen ? '' : 'd-none'}>Clients</span>
+                                    <span className={isOpen ? '' : 'd-none'}>{t('menu.clients')}</span>
                                 </Link>
-                            </li>
-                            <li className="nav-item">
+                            </li>}
+                            {canAccess('/administration') && <li className="nav-item">
                                 <Link
                                     className={`nav-link ${isActive('/administration') ? 'active' : ''}`}
                                     to="/administration"
-                                    title="Administration"
+                                    title={t('menu.administration')}
                                 >
                                     <i className="iconoir-settings menu-icon"></i>
-                                    <span className={isOpen ? '' : 'd-none'}>Administration</span>
+                                    <span className={isOpen ? '' : 'd-none'}>{t('menu.administration')}</span>
                                 </Link>
-                            </li>
+                            </li>}
+                            {canAccess('/administration') && <li className="nav-item">
+                                <Link
+                                    className={`nav-link ${isActive('/administration/groupes-agents') ? 'active' : ''}`}
+                                    to="/administration/groupes-agents"
+                                    title={t('menu.groupsAgents')}
+                                >
+                                    <i className="iconoir-group menu-icon"></i>
+                                    <span className={isOpen ? '' : 'd-none'}>{t('menu.groupsAgents')}</span>
+                                </Link>
+                            </li>}
                         </ul>
                     </div>
                 </div>

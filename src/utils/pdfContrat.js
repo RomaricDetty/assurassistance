@@ -111,19 +111,41 @@ const COLUMN_WIDTH_PT = 66;
  * Seuls Prénoms, Nom, ID / N° de carte (3 colonnes).
  */
 const OVERLAY_POSITIONS = {
-    prenom: { x: MARGIN_LEFT_PT, y: 704 },
-    nom: { x: MARGIN_LEFT_PT + COLUMN_WIDTH_PT - 5, y: 704 },
-    idCarte: { x: MARGIN_LEFT_PT + (COLUMN_WIDTH_PT * 3) - 30, y: 704 }
+    prenom: { x: MARGIN_LEFT_PT, y: 707 },
+    nom: { x: MARGIN_LEFT_PT + COLUMN_WIDTH_PT - 5, y: 707 },
+    idCarte: { x: MARGIN_LEFT_PT + (COLUMN_WIDTH_PT * 3) - 30, y: 705 }
 };
 
-const FONT_SIZE = 6;
+const FONT_SIZE = 4;
+const SECOND_LINE_Y_OFFSET = 4;
 
 /** Longueur max pour éviter les chevauchements dans le PDF. */
 const MAX_LENGTH_BY_FIELD = {
-    prenom: 14,
-    nom: 12,
+    prenom: 21,
+    nom: 19,
     idCarte: 24
 };
+
+/** Découpe un texte en 2 lignes maximum selon une longueur de ligne donnée. */
+function splitTextInTwoLines(value, maxLenPerLine) {
+    const text = String(value ?? '').trim();
+    if (!text) return [];
+    const firstChunk = text.substring(0, maxLenPerLine);
+    const secondLine = text.substring(maxLenPerLine, maxLenPerLine * 2);
+    if (!secondLine) return [firstChunk];
+
+    /**
+     * Détecte une coupure au milieu d'un mot pour ajouter une césure visuelle.
+     * Exemple : "Y|anka" devient "Y-" puis "anka".
+     */
+    const isWordChar = (char) => /[A-Za-zÀ-ÖØ-öø-ÿ0-9]/.test(char || '');
+    const previousChar = text.charAt(maxLenPerLine - 1);
+    const nextChar = text.charAt(maxLenPerLine);
+    const shouldHyphenate = isWordChar(previousChar) && isWordChar(nextChar);
+    const firstLine = shouldHyphenate ? `${firstChunk}-` : firstChunk;
+
+    return [firstLine, secondLine];
+}
 
 /**
  * Dessine les données en overlay sur la première page (fallback quand pas de champs AcroForm).
@@ -144,6 +166,21 @@ function drawTextOverlay(doc, data) {
         const pos = OVERLAY_POSITIONS[key];
         if (!pos || value === '') continue;
         const maxLen = MAX_LENGTH_BY_FIELD[key] ?? 25;
+        const isMultiLineField = key === 'prenom' || key === 'nom';
+
+        if (isMultiLineField) {
+            const lines = splitTextInTwoLines(value, maxLen);
+            lines.forEach((line, index) => {
+                page.drawText(line, {
+                    x: pos.x,
+                    y: pos.y - (index * SECOND_LINE_Y_OFFSET),
+                    size: FONT_SIZE,
+                    font
+                });
+            });
+            continue;
+        }
+
         const text = String(value).trim().substring(0, maxLen);
         page.drawText(text, {
             x: pos.x,

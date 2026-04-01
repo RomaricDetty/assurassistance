@@ -15,6 +15,7 @@ import {
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
+import { useI18n } from '../../i18n';
 
 const INITIAL_FORM = {
     prenom: '',
@@ -32,7 +33,7 @@ const isDuplicateError = (res) => {
 /** Message d'erreur affiché pour un doublon. */
 const getDuplicateMessage = (res) => {
     if (res?.message?.trim()) return res.message;
-    return 'Ce client existe déjà.';
+    return 'Ce client existe deja.';
 };
 
 /** Normalise le type de contrat (Excel ou API) vers Business, Premier ou Platinum. */
@@ -70,6 +71,7 @@ const nextUniqueFileName = (baseFileName, usedNames) => {
  * téléchargement du fichier renommé, ou import Excel pour génération en lot.
  */
 export const ContratsClients = () => {
+    const { t } = useI18n();
     const token = useSelector((s) => s.auth.token);
     const [formData, setFormData] = useState(INITIAL_FORM);
     const [loading, setLoading] = useState(false);
@@ -89,9 +91,9 @@ export const ContratsClients = () => {
 
     const validate = () => {
         const e = {};
-        if (!formData.prenom?.trim()) e.prenom = 'Le prénom est requis';
-        if (!formData.nom?.trim()) e.nom = 'Le nom est requis';
-        if (!formData.typeContrat) e.typeContrat = 'Le type de contrat est requis';
+        if (!formData.prenom?.trim()) e.prenom = t('contractsClients.firstNameRequired');
+        if (!formData.nom?.trim()) e.nom = t('contractsClients.lastNameRequired');
+        if (!formData.typeContrat) e.typeContrat = t('contractsClients.contractTypeRequired');
         setErrors(e);
         return Object.keys(e).length === 0;
     };
@@ -107,7 +109,7 @@ export const ContratsClients = () => {
     const handleListPdfFields = async () => {
         const type = formData.typeContrat;
         if (!type) {
-            sendToastError('Sélectionnez d\'abord un type de contrat');
+            sendToastError(t('contractsClients.selectContractTypeFirst'));
             return;
         }
         setLoadingFields(true);
@@ -115,12 +117,12 @@ export const ContratsClients = () => {
         try {
             const url = getTemplateUrl(type);
             const res = await fetch(url);
-            if (!res.ok) throw new Error('Template introuvable');
+            if (!res.ok) throw new Error(t('contractsClients.templateNotFound'));
             const buffer = await res.arrayBuffer();
             const { names, count } = await listPdfFormFieldNames(buffer);
             setPdfFieldNames({ names, count, type });
         } catch (err) {
-            sendToastError(err.message || 'Erreur');
+            sendToastError(err.message || t('contractsClients.generateError'));
         } finally {
             setLoadingFields(false);
         }
@@ -139,7 +141,7 @@ export const ContratsClients = () => {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Contrats');
         XLSX.writeFile(wb, 'modele_contrats.xlsx');
-        sendToastSuccess('Fichier Excel téléchargé');
+        sendToastSuccess(t('contractsClients.excelDownloaded'));
     };
 
     /** Enregistre le client via l'API puis génère et télécharge le PDF à partir du formulaire. */
@@ -156,22 +158,21 @@ export const ContratsClients = () => {
             };
             const createRes = await createClient(token, payload);
             if (!createRes.data && !createRes.success) {
-                const msg = isDuplicateError(createRes) ? getDuplicateMessage(createRes) : (createRes.message || 'Erreur enregistrement client');
+                const msg = isDuplicateError(createRes) ? getDuplicateMessage(createRes) : (createRes.message || t('contractsClients.saveClientError'));
                 sendToastError(msg);
                 return;
             }
             const url = getTemplateUrl(normalizeTypeContrat(formData.typeContrat));
             const res = await fetch(url);
-            if (!res.ok) throw new Error('Template PDF introuvable');
+            if (!res.ok) throw new Error(t('contractsClients.templatePdfMissing'));
             const buffer = await res.arrayBuffer();
             const filled = await fillPdfContrat(buffer, formToPdfData());
             const blob = new Blob([filled], { type: 'application/pdf' });
             const fileName = getContratFileName(formData);
             downloadBlob(blob, fileName);
-            sendToastSuccess('Client enregistré et contrat téléchargé');
+            sendToastSuccess(t('contractsClients.clientSavedAndDownloaded'));
         } catch (err) {
-            console.error(err);
-            sendToastError(err.message || 'Erreur lors de la génération du PDF');
+            sendToastError(err.message || t('contractsClients.generatePdfError'));
         } finally {
             setLoading(false);
         }
@@ -212,7 +213,7 @@ export const ContratsClients = () => {
                     reject(err);
                 }
             };
-            reader.onerror = () => reject(new Error('Lecture du fichier impossible'));
+            reader.onerror = () => reject(new Error(t('contractsClients.invalidExcel')));
             reader.readAsArrayBuffer(file);
         });
     };
@@ -225,16 +226,16 @@ export const ContratsClients = () => {
         const file = e.target.files?.[0];
         if (!file) return;
         const list = await parseExcelFile(file).catch((err) => {
-            sendToastError(err.message || 'Fichier Excel invalide');
+            sendToastError(err.message || t('contractsClients.invalidExcel'));
             return null;
         });
         if (!list || list.length === 0) {
-            sendToastError('Aucune ligne valide. Colonnes attendues : prénom, nom, ID / N° de carte, type de contrat');
+            sendToastError(t('contractsClients.invalidRowsExpected'));
             e.target.value = '';
             return;
         }
         if (!token) {
-            sendToastError('Authentification requise');
+            sendToastError(t('contractsClients.authRequired'));
             e.target.value = '';
             return;
         }
@@ -248,7 +249,7 @@ export const ContratsClients = () => {
             }));
         const totalProcessed = payloads.length;
         if (totalProcessed === 0) {
-            sendToastError('Aucune ligne valide à envoyer');
+            sendToastError(t('contractsClients.noValidRowsToSend'));
             e.target.value = '';
             return;
         }
@@ -266,7 +267,7 @@ export const ContratsClients = () => {
             const firstOtherErrorMessage = apiErrors[0]?.message || (bulkRes.success === false ? bulkRes.message : null);
 
             if (bulkRes.success === false && totalCreated === 0 && !firstOtherErrorMessage) {
-                sendToastError(bulkRes.message || 'Erreur lors de la création en masse');
+                sendToastError(bulkRes.message || t('contractsClients.bulkCreateError'));
                 e.target.value = '';
                 return;
             }
@@ -290,7 +291,7 @@ export const ContratsClients = () => {
                 sendToastSuccess(meta.messageDetail);
             }
             if (duplicateCount > 0) {
-                sendToastError(`${duplicateCount} des ${totalProcessed} donnée(s) en conflit ou existent déjà.`);
+                sendToastError(t('contractsClients.duplicateConflict', { count: duplicateCount, total: totalProcessed }));
             }
             if (firstOtherErrorMessage && toGenerate.length === 0 && duplicateCount === 0) {
                 sendToastError(firstOtherErrorMessage);
@@ -369,16 +370,16 @@ export const ContratsClients = () => {
                     if (z < zipBlobs.length - 1) await new Promise((r) => setTimeout(r, 300));
                 }
                 sendToastSuccess(zipBlobs.length > 1
-                    ? `${toGenerate.length} client(s) enregistré(s), ${zipBlobs.length} archive(s) téléchargée(s)`
-                    : `${toGenerate.length} client(s) enregistré(s), archive téléchargée`);
+                    ? t('contractsClients.zipDoneMulti', { count: toGenerate.length, archives: zipBlobs.length })
+                    : t('contractsClients.zipDoneSingle', { count: toGenerate.length }));
             } else if (duplicateCount === 0 && !firstOtherErrorMessage) {
-                sendToastError('Aucun client enregistré');
+                sendToastError(t('contractsClients.noClientSaved'));
             }
             if (firstOtherErrorMessage && toGenerate.length > 0) {
                 sendToastError(firstOtherErrorMessage);
             }
         } catch (err) {
-            sendToastError(err.message || 'Erreur lors de la génération');
+            sendToastError(err.message || t('contractsClients.generateError'));
         } finally {
             setExcelProgress(null);
             setLoadingExcel(false);
@@ -393,10 +394,10 @@ export const ContratsClients = () => {
                     <div className="row">
                         <div className="col-sm-12">
                             <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">Contrats clients</h4>
+                                <h4 className="page-title">{t('contractsClients.title')}</h4>
                                 <ol className="breadcrumb mb-0">
                                     <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">Contrats clients</li>
+                                    <li className="breadcrumb-item active">{t('contractsClients.title')}</li>
                                 </ol>
                             </div>
                         </div>
@@ -406,54 +407,54 @@ export const ContratsClients = () => {
                         <div className="col-lg-6">
                             <div className="card">
                                 <div className="card-header">
-                                    <h5 className="card-title mb-0">Nouveau contrat (formulaire)</h5>
+                                    <h5 className="card-title mb-0">{t('contractsClients.newContract')}</h5>
                                 </div>
                                 <div className="card-body">
                                     <form onSubmit={handleGeneratePdf}>
                                         <div className="mb-3">
-                                            <label className="form-label">Prénoms</label>
+                                            <label className="form-label">{t('contractsClients.firstNames')}</label>
                                             <input
                                                 type="text"
                                                 className={`form-control ${errors.prenom ? 'is-invalid' : ''}`}
                                                 name="prenom"
                                                 value={formData.prenom}
                                                 onChange={handleChange}
-                                                placeholder="Prénoms du client"
+                                                placeholder={t('contractsClients.firstNamesPlaceholder')}
                                             />
                                             {errors.prenom && <div className="invalid-feedback">{errors.prenom}</div>}
                                         </div>
                                         <div className="mb-3">
-                                            <label className="form-label">Nom</label>
+                                            <label className="form-label">{t('contractsClients.lastName')}</label>
                                             <input
                                                 type="text"
                                                 className={`form-control ${errors.nom ? 'is-invalid' : ''}`}
                                                 name="nom"
                                                 value={formData.nom}
                                                 onChange={handleChange}
-                                                placeholder="Nom du client"
+                                                placeholder={t('contractsClients.lastNamePlaceholder')}
                                             />
                                             {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
                                         </div>
                                         <div className="mb-3">
-                                            <label className="form-label">ID / N° de carte</label>
+                                            <label className="form-label">{t('contractsClients.cardNumberLabel')}</label>
                                             <input
                                                 type="text"
                                                 className="form-control"
                                                 name="idCarte"
                                                 value={formData.idCarte}
                                                 onChange={handleChange}
-                                                placeholder="N° carte bancaire"
+                                                placeholder={t('contractsClients.cardNumberPlaceholder')}
                                             />
                                         </div>
                                         <div className="mb-3">
-                                            <label className="form-label">Type de contrat</label>
+                                            <label className="form-label">{t('contractsClients.contractType')}</label>
                                             <select
                                                 className={`form-select ${errors.typeContrat ? 'is-invalid' : ''}`}
                                                 name="typeContrat"
                                                 value={formData.typeContrat}
                                                 onChange={handleChange}
                                             >
-                                                <option value="">Choisir...</option>
+                                                <option value="">{t('contractsClients.choose')}</option>
                                                 {TYPES_CONTRAT.map((t) => (
                                                     <option key={t.value} value={t.value}>{t.label}</option>
                                                 ))}
@@ -461,7 +462,7 @@ export const ContratsClients = () => {
                                             {errors.typeContrat && <div className="invalid-feedback">{errors.typeContrat}</div>}
                                         </div>
                                         <button type="submit" className="btn btn-primary me-2" disabled={loading}>
-                                            {loading ? <Loader /> : 'Générer et télécharger le contrat'}
+                                            {loading ? <Loader /> : t('contractsClients.generateDownload')}
                                         </button>
                                         {/* <button type="button" className="btn btn-outline-secondary btn-sm" onClick={handleListPdfFields} disabled={loadingFields || !formData.typeContrat} title="Voir les noms des champs du PDF (diagnostic)">
                                             {loadingFields ? '...' : 'Voir les champs du PDF'}
@@ -469,12 +470,12 @@ export const ContratsClients = () => {
                                     </form>
                                     {pdfFieldNames && (
                                         <div className="mt-3 p-3 bg-light rounded small">
-                                            <strong>Champs du PDF « {pdfFieldNames.type} » :</strong> {pdfFieldNames.count} champ(s).
+                                            <strong>{t('contractsClients.pdfFieldsTitle', { type: pdfFieldNames.type, count: pdfFieldNames.count })}</strong>
                                             {pdfFieldNames.count === 0 ? (
-                                                <p className="text-warning mb-0 mt-1">Ce PDF n’a pas de champs formulaire AcroForm. Le pré-remplissage ne fonctionne qu’avec des PDF « formulaire » (champs remplissables). Vérifiez que vos modèles sont bien des formulaires PDF et non de simples tableaux dessinés.</p>
+                                                <p className="text-warning mb-0 mt-1">{t('contractsClients.noAcroForm')}</p>
                                             ) : (
                                                 <>
-                                                    <p className="text-muted mb-1 mt-1">Noms détectés (à faire correspondre dans le code si le remplissage échoue) :</p>
+                                                    <p className="text-muted mb-1 mt-1">{t('contractsClients.detectedNames')}</p>
                                                     <pre className="mb-0 text-break" style={{ maxHeight: '200px', overflow: 'auto' }}>{pdfFieldNames.names.join('\n')}</pre>
                                                 </>
                                             )}
@@ -487,7 +488,7 @@ export const ContratsClients = () => {
                         <div className="col-lg-6">
                             <div className="card">
                                 <div className="card-header">
-                                    <h5 className="card-title mb-0">Import Excel</h5>
+                                    <h5 className="card-title mb-0">{t('contractsClients.excelImport')}</h5>
                                 </div>
                                 <div className="card-body position-relative">
                                     {loadingExcel && (
@@ -495,20 +496,20 @@ export const ContratsClients = () => {
                                             <Loader />
                                             <span className="mt-3 mb-3 text-muted small">
                                                 {excelProgress?.phase === 'upload'
-                                                    ? `Enregistrement des clients (API bulk)...`
+                                                    ? t('contractsClients.uploadPhase')
                                                     : excelProgress?.phase === 'pdf'
-                                                        ? `Génération PDF ${excelProgress.current.toLocaleString('fr-FR')} / ${excelProgress.total.toLocaleString('fr-FR')}...`
+                                                        ? t('contractsClients.pdfPhase', { current: excelProgress.current.toLocaleString('fr-FR'), total: excelProgress.total.toLocaleString('fr-FR') })
                                                         : excelProgress?.phase === 'zip'
-                                                            ? 'Création de l\'archive...'
-                                                            : 'En cours...'}
+                                                            ? t('contractsClients.zipPhase')
+                                                            : t('contractsClients.inProgress')}
                                             </span>
                                         </div>
                                     )}
                                     <p className="text-muted small mb-2">
-                                        Colonnes Excel : <strong>Prénoms</strong>, <strong>Nom</strong>, <strong>ID / N° de carte</strong>, <strong>Type de contrat</strong> (Business, Premier ou Platinum). Les contrats générés sont regroupés dans une archive ZIP (un seul téléchargement).
+                                        {t('contractsClients.excelColumnsHelp')}
                                     </p>
                                     <button type="button" className="btn btn-outline-success btn-sm mb-3" onClick={handleDownloadExcelTemplate} disabled={loadingExcel}>
-                                        <i className="iconoir-download me-1" /> Télécharger un fichier Excel modèle
+                                        <i className="iconoir-download me-1" /> {t('contractsClients.downloadTemplate')}
                                     </button>
                                     <input
                                         ref={fileInputRef}

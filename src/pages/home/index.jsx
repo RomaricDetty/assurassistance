@@ -6,6 +6,7 @@ import { Loader } from '../../components/loader';
 import { listClients } from '../../services/clients';
 import { TYPES_CONTRAT } from '../../utils/pdfContrat';
 import { sendToastError } from '../../helpers';
+import { useI18n } from '../../i18n';
 
 /**
  * Récupère tous les clients page par page et retourne les effectifs par type de contrat.
@@ -39,19 +40,19 @@ const TYPE_STYLE = {
         icon: 'iconoir-bag',
         color: '#e4590f',
         bgLight: 'rgba(228, 89, 15, 0.08)',
-        label: 'Contrat Business'
+        labelKey: 'home.contractBusiness'
     },
     Premier: {
         icon: 'iconoir-star',
         color: '#0da684',
         bgLight: 'rgba(13, 166, 132, 0.08)',
-        label: 'Contrat Premier'
+        labelKey: 'home.contractPremier'
     },
     Platinum: {
         icon: 'iconoir-medal',
         color: '#2c7be5',
         bgLight: 'rgba(44, 123, 229, 0.08)',
-        label: 'Contrat Platinum'
+        labelKey: 'home.contractPlatinum'
     }
 };
 
@@ -59,6 +60,7 @@ const TYPE_STYLE = {
  * Tableau de bord - page d'accueil : affiche le nombre de clients par type de contrat.
  */
 export const Home = () => {
+    const { t } = useI18n();
     const token = useSelector((s) => s.auth.token);
     const [countsByType, setCountsByType] = useState({ Business: 0, Premier: 0, Platinum: 0 });
     const [loading, setLoading] = useState(true);
@@ -68,9 +70,9 @@ export const Home = () => {
         setLoading(true);
         fetchCountsByType(token)
             .then(setCountsByType)
-            .catch(() => sendToastError('Erreur chargement des statistiques'))
+            .catch(() => sendToastError(t('home.statsError')))
             .finally(() => setLoading(false));
-    }, [token]);
+    }, [token, t]);
 
     const total = (countsByType.Business ?? 0) + (countsByType.Premier ?? 0) + (countsByType.Platinum ?? 0);
 
@@ -81,10 +83,10 @@ export const Home = () => {
                     <div className="row">
                         <div className="col-sm-12">
                             <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">Tableau de bord</h4>
+                                <h4 className="page-title">{t('home.title')}</h4>
                                 <ol className="breadcrumb mb-0">
                                     <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">Tableau de bord</li>
+                                    <li className="breadcrumb-item active">{t('home.title')}</li>
                                 </ol>
                             </div>
                         </div>
@@ -103,20 +105,20 @@ export const Home = () => {
                                                     <i className="iconoir-community" style={{ fontSize: '1.5rem', color: '#e4590f' }} />
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <h5 className="mb-0 fw-semibold text-truncate">Total clients</h5>
-                                                    <p className="text-muted small mb-0 d-none d-sm-block">Tous types de contrats confondus</p>
+                                                    <h5 className="mb-0 fw-semibold text-truncate">{t('home.totalClients')}</h5>
+                                                    <p className="text-muted small mb-0 d-none d-sm-block">{t('home.allContractTypes')}</p>
                                                 </div>
                                             </div>
                                             <div className="text-end ms-auto">
                                                 <span className="home-total-count fw-bold" style={{ color: '#e4590f' }}>{total}</span>
-                                                <span className="text-muted ms-1">client(s)</span>
+                                                <span className="text-muted ms-1">{t('home.clientsSuffix')}</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <h5 className="mb-3 fw-semibold">Répartition par type de contrat</h5>
+                            <h5 className="mb-3 fw-semibold">{t('home.distribution')}</h5>
                             <div className="row g-3 g-md-4">
                                 {TYPES_CONTRAT.map(({ value }) => {
                                     const style = TYPE_STYLE[value] || TYPE_STYLE.Business;
@@ -155,7 +157,7 @@ export const Home = () => {
                                                         <h2 className="fw-bold mb-1 fs-2" style={{ color: style.color }}>
                                                             {count}
                                                         </h2>
-                                                        <p className="text-muted small mb-2">{style.label}</p>
+                                                        <p className="text-muted small mb-2">{t(style.labelKey)}</p>
                                                         <div className="rounded-2 overflow-hidden" style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.06)' }}>
                                                             <div
                                                                 className="h-100 rounded-2"

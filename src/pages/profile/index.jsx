@@ -5,11 +5,13 @@ import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
 import { getAdministrateurMe, updateAdministrateur } from '../../services/administrateurs';
 import { sendToastError, sendToastSuccess } from '../../helpers';
+import { useI18n } from '../../i18n';
 
 /**
  * Page Profil : affiche les infos de l'administrateur connecté (GET /administrateurs/me).
  */
 export const Profile = () => {
+    const { t } = useI18n();
     const token = useSelector((s) => s.auth.token);
     const [admin, setAdmin] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -31,10 +33,10 @@ export const Profile = () => {
                     login: res.data.login ?? ''
                 });
             } else {
-                sendToastError('Erreur chargement du profil');
+                sendToastError(t('profile.profileLoadError'));
             }
         } catch (err) {
-            sendToastError('Erreur chargement du profil');
+            sendToastError(t('profile.profileLoadError'));
         } finally {
             setLoading(false);
         }
@@ -60,14 +62,14 @@ export const Profile = () => {
                 email: form.email
             });
             if (res.data != null || res.success) {
-                sendToastSuccess('Profil mis à jour');
+                sendToastSuccess(t('profile.profileUpdateSuccess'));
                 setEditing(false);
                 fetchMe();
             } else {
-                sendToastError(res.message || 'Erreur mise à jour');
+                sendToastError(res.message || t('profile.profileUpdateError'));
             }
         } catch (err) {
-            sendToastError('Erreur mise à jour');
+            sendToastError(t('profile.profileUpdateError'));
         } finally {
             setSaving(false);
         }
@@ -90,7 +92,7 @@ export const Profile = () => {
             <Layout>
                 <div className="page-content">
                     <div className="container-fluid">
-                        <p className="text-muted">Impossible de charger le profil.</p>
+                        <p className="text-muted">{t('profile.profileUnavailable')}</p>
                     </div>
                 </div>
             </Layout>
@@ -104,10 +106,10 @@ export const Profile = () => {
                     <div className="row">
                         <div className="col-sm-12">
                             <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">Mon profil</h4>
+                                <h4 className="page-title">{t('profile.title')}</h4>
                                 <ol className="breadcrumb mb-0">
                                     <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">Profil</li>
+                                    <li className="breadcrumb-item active">{t('nav.profile')}</li>
                                 </ol>
                             </div>
                         </div>
@@ -116,37 +118,37 @@ export const Profile = () => {
                         <div className="col-lg-6">
                             <div className="card">
                                 <div className="card-header d-flex justify-content-between align-items-center">
-                                    <h5 className="card-title mb-0">Informations</h5>
+                                    <h5 className="card-title mb-0">{t('profile.infos')}</h5>
                                     {!editing ? (
-                                        <button type="button" className="btn btn-sm btn-primary" onClick={() => setEditing(true)}>Modifier</button>
+                                        <button type="button" className="btn btn-sm btn-primary" onClick={() => setEditing(true)}>{t('profile.edit')}</button>
                                     ) : (
-                                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditing(false)}>Annuler</button>
+                                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditing(false)}>{t('common.cancel')}</button>
                                     )}
                                 </div>
                                 <div className="card-body">
                                     <form onSubmit={handleSave}>
                                         <div className="mb-3">
-                                            <label className="form-label">Login</label>
+                                            <label className="form-label">{t('administration.login')}</label>
                                             <input type="text" className="form-control" value={form.login} readOnly disabled />
                                         </div>
                                         <div className="mb-3">
-                                            <label className="form-label">Nom</label>
+                                            <label className="form-label">{t('profile.lastName')}</label>
                                             <input type="text" className="form-control" name="nom" value={form.nom} onChange={handleChange} disabled={!editing} />
                                         </div>
                                         <div className="mb-3">
-                                            <label className="form-label">Prénom</label>
+                                            <label className="form-label">{t('profile.firstName')}</label>
                                             <input type="text" className="form-control" name="prenom" value={form.prenom} onChange={handleChange} disabled={!editing} />
                                         </div>
                                         <div className="mb-3">
-                                            <label className="form-label">Email</label>
+                                            <label className="form-label">{t('administration.email')}</label>
                                             <input type="email" className="form-control" name="email" value={form.email} onChange={handleChange} disabled={!editing} />
                                         </div>
                                         <div className="mb-2">
-                                            <span className="text-muted">Statut : </span>
-                                            <span className={admin.isActive ? 'text-success' : 'text-secondary'}>{admin.isActive ? 'Actif' : 'Inactif'}</span>
+                                            <span className="text-muted">{t('profile.status')} : </span>
+                                            <span className={admin.isActive ? 'text-success' : 'text-secondary'}>{admin.isActive ? t('profile.active') : t('profile.inactive')}</span>
                                         </div>
                                         {editing && (
-                                            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+                                            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? t('common.loading') : t('common.save')}</button>
                                         )}
                                     </form>
                                 </div>

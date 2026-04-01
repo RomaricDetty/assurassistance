@@ -16,23 +16,34 @@ import { Profile } from './pages/profile';
 import { ContratsClients } from './pages/contrats-clients';
 import { Clients } from './pages/clients';
 import { Administration } from './pages/administration';
+import { AdministrationGroupes } from './pages/administration-groupes';
 
 function App() {
 
     const token = useSelector(state => state.auth.token);
+    const administrateur = useSelector(state => state.auth.administrateur);
     const userRole = useSelector(state => state.auth.role);
+    const interfaceLinks = administrateur?.interfaceLinks;
     useTokenExpiration();
+    const isSuperAdmin = String(userRole || '').toUpperCase() === 'SUPER_ADMIN';
+    const hasAccess = (path) => {
+        if (isSuperAdmin) return true;
+        if (!Array.isArray(interfaceLinks) || interfaceLinks.length === 0) return true;
+        return interfaceLinks.includes(path);
+    };
+    const fallbackRoute = hasAccess('/') ? '/' : hasAccess('/contrats-clients') ? '/contrats-clients' : hasAccess('/clients') ? '/clients' : '/profile';
 
     return (
         <>
-            {token && userRole === 'admin' ? (
+            {token ? (
                 <Routes>
-                    <Route path="/" element={<Home />} />
+                    {hasAccess('/') && <Route path="/" element={<Home />} />}
                     <Route path="/profile" element={<Profile />} />
-                    <Route path="/contrats-clients" element={<ContratsClients />} />
-                    <Route path="/clients" element={<Clients />} />
-                    <Route path="/administration" element={<Administration />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
+                    {hasAccess('/contrats-clients') && <Route path="/contrats-clients" element={<ContratsClients />} />}
+                    {hasAccess('/clients') && <Route path="/clients" element={<Clients />} />}
+                    {hasAccess('/administration') && <Route path="/administration" element={<Administration />} />}
+                    {hasAccess('/administration') && <Route path="/administration/groupes-agents" element={<AdministrationGroupes />} />}
+                    <Route path="*" element={<Navigate to={fallbackRoute} replace />} />
                 </Routes>
             ) : (
                 <Routes>

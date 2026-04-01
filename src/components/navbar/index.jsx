@@ -3,11 +3,13 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { useDispatch, useSelector } from 'react-redux';
 import { logOut } from '../../store/actions/authentication';
+import { useI18n } from '../../i18n';
 
 export const Navbar = ({ onToggleSidebar }) => {
+    const { lang, setLang, t } = useI18n();
     const dispatch = useDispatch();
     const administrateur = useSelector(state => state.auth.administrateur);
-    const displayName = administrateur ? [administrateur.prenom, administrateur.nom].filter(Boolean).join(' ') || administrateur.login : 'Administrateur';
+    const displayName = administrateur ? [administrateur.prenom, administrateur.nom].filter(Boolean).join(' ') || administrateur.login : t('nav.administrator');
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [dropdownStyle, setDropdownStyle] = useState({});
@@ -117,7 +119,7 @@ export const Navbar = ({ onToggleSidebar }) => {
                                     className="nav-link nav-icon"
                                     onClick={toggleTheme}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: isDarkMode ? '#fff !important' : '#000 !important' }}
-                                    title={isDarkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}
+                                    title={isDarkMode ? t('nav.switchLight') : t('nav.switchDark')}
                                 >
                                     {isDarkMode ? (
                                         <i className="iconoir-sun-light" style={{ fontSize: '20px' }}></i>
@@ -125,6 +127,19 @@ export const Navbar = ({ onToggleSidebar }) => {
                                         <i className="iconoir-half-moon" style={{ fontSize: '20px' }}></i>
                                     )}
                                 </button>
+                            </li>
+                            <li className="topbar-item">
+                                <select
+                                    className="form-select form-select-sm"
+                                    value={lang}
+                                    onChange={(e) => setLang(e.target.value)}
+                                    aria-label={t('common.language')}
+                                    title={t('common.language')}
+                                    style={{ minWidth: 96 }}
+                                >
+                                    <option value="en">{t('common.english')}</option>
+                                    <option value="fr">{t('common.french')}</option>
+                                </select>
                             </li>
 
 
@@ -160,17 +175,17 @@ export const Navbar = ({ onToggleSidebar }) => {
                                                 <h6 className="my-0 fw-medium text-dark fs-13">
                                                     {displayName}
                                                 </h6>
-                                                <small className="text-muted mb-0">Administrateur</small>
+                                                <small className="text-muted mb-0">{t('nav.administrator')}</small>
                                             </div>
                                         </div>
                                         <div className="dropdown-divider mt-0"></div>
-                                        <small className="text-muted px-2 pb-1 d-block">Compte</small>
+                                        <small className="text-muted px-2 pb-1 d-block">{t('nav.account')}</small>
                                         <Link to="/profile" className="dropdown-item" onClick={() => setDropdownOpen(false)}>
-                                            <i className="las la-user fs-18 me-1 align-text-bottom"></i> Profil
+                                            <i className="las la-user fs-18 me-1 align-text-bottom"></i> {t('nav.profile')}
                                         </Link>
                                         <div className="dropdown-divider mb-0"></div>
                                         <a className="dropdown-item text-danger" href="#" onClick={(e) => { e.preventDefault(); setDropdownOpen(false); openLogoutModal(e); }}>
-                                            <i className="las la-power-off fs-18 me-1 align-text-bottom"></i> Déconnexion
+                                            <i className="las la-power-off fs-18 me-1 align-text-bottom"></i> {t('nav.logout')}
                                         </a>
                                     </div>,
                                     document.body
@@ -188,18 +203,18 @@ export const Navbar = ({ onToggleSidebar }) => {
                         <div className="modal-dialog modal-dialog-centered" role="document">
                             <div className="modal-content">
                                 <div className="modal-header">
-                                    <h5 className="modal-title">Confirmation de déconnexion</h5>
+                                    <h5 className="modal-title">{t('nav.logoutConfirmTitle')}</h5>
                                     <button type="button" className="btn-close" onClick={closeLogoutModal} aria-label="Close"></button>
                                 </div>
                                 <div className="modal-body">
-                                    <p>Êtes-vous sûr de vouloir vous déconnecter ?</p>
+                                    <p>{t('nav.logoutConfirmBody')}</p>
                                 </div>
                                 <div className="modal-footer">
                                     <button type="button" className="btn btn-secondary" onClick={closeLogoutModal}>
-                                        Annuler
+                                        {t('common.cancel')}
                                     </button>
                                     <button type="button" className="btn btn-danger" onClick={handleLogout}>
-                                        Se déconnecter
+                                        {t('nav.logoutConfirmAction')}
                                     </button>
                                 </div>
                             </div>

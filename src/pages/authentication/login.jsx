@@ -7,8 +7,10 @@ import { Loader } from '../../components/loader';
 import { toast } from 'react-toastify';
 import LogoAssurAssistance from '../../assets/images/logo_assurassistance.png';
 import { sendToastError } from '../../helpers';
+import { useI18n } from '../../i18n';
 
 export const Login = () => {
+    const { t } = useI18n();
 
     const [formData, setFormData] = useState({
         login: '',
@@ -40,19 +42,19 @@ export const Login = () => {
     const validateForm = () => {
         const errors = {};
         if (!formData.login.trim()) {
-            errors.login = "Le login est requis";
+            errors.login = t('login.loginRequired');
         }
         if (!formData.password) {
-            errors.password = "Le mot de passe est requis";
+            errors.password = t('login.passwordRequired');
         }
         return errors;
     };
 
     const performLogin = (token, administrateur) => {
-        const role = 'admin';
+        const role = administrateur?.role || 'SUPER_ADMIN';
         dispatch(signInSuccess(token, role, role, administrateur));
         const prenom = administrateur?.prenom || '';
-        toast.success(prenom ? `Bon retour, ${prenom} !` : 'Connexion réussie.', {
+        toast.success(prenom ? t('login.welcomeBack', { prenom }) : t('login.success'), {
             position: "top-right",
             autoClose: 3000,
             hideProgressBar: false,
@@ -77,11 +79,11 @@ export const Login = () => {
             if (response.data?.token) {
                 performLogin(response.data.token, response.data.administrateur ?? null);
             } else {
-                const msg = response.message || response.error || 'Identifiants incorrects';
+                const msg = response.message || response.error || t('login.invalidCredentials');
                 sendToastError(msg);
             }
         } catch (err) {
-            sendToastError(err.message || 'Une erreur est survenue');
+            sendToastError(err.message || t('login.genericError'));
         } finally {
             setLoading(false);
         }
@@ -110,7 +112,7 @@ export const Login = () => {
                                                     Assur'Assistance
                                                 </h4> */}
                                                 <p className="text-muted fw-medium mb-0 mt-3">
-                                                    Se connecter pour continuer.
+                                                    {t('login.subtitle')}
                                                 </p>
                                             </div>
                                         </div>
@@ -125,7 +127,7 @@ export const Login = () => {
                                                         className={`form-control ${submitted && formErrors.login ? 'is-invalid' : ''}`}
                                                         id="login"
                                                         name="login"
-                                                        placeholder="Entrer le login"
+                                                        placeholder={t('login.loginPlaceholder')}
                                                         value={formData.login}
                                                         onChange={handleChange}
                                                     />
@@ -136,14 +138,14 @@ export const Login = () => {
                                                 {/*end form-group*/}
                                                 <div className="form-group">
                                                     <label className="form-label" htmlFor="userpassword">
-                                                        Mot de passe
+                                                        {t('login.password')}
                                                     </label>
                                                     <input
                                                         type="password"
                                                         className={`form-control ${submitted && formErrors.password ? 'is-invalid' : ''}`}
                                                         name="password"
                                                         id="userpassword"
-                                                        placeholder="Entrer le mot de passe"
+                                                        placeholder={t('login.passwordPlaceholder')}
                                                         value={formData.password}
                                                         onChange={handleChange}
                                                     />
@@ -163,7 +165,7 @@ export const Login = () => {
                                                                     </div>
                                                                     :
                                                                     <button className="btn" style={{ backgroundColor: '#e4590f', borderColor: '#e4590f' }} type="submit">
-                                                                        Se connecter <i className="fas fa-sign-in-alt ms-1" />
+                                                                        {t('login.submit')} <i className="fas fa-sign-in-alt ms-1" />
                                                                     </button>
                                                             }
                                                         </div>
