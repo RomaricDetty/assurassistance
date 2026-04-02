@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
+import { PageHeader } from '../../components/page-header';
 import { getAdministrateurMe, updateAdministrateur } from '../../services/administrateurs';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
+import { getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 
 /**
  * Page Profil : affiche les infos de l'administrateur connecté (GET /administrateurs/me).
@@ -19,7 +21,7 @@ export const Profile = () => {
     const [form, setForm] = useState({ nom: '', prenom: '', email: '', login: '' });
     const [saving, setSaving] = useState(false);
 
-    const fetchMe = async () => {
+    const fetchMe = useCallback(async () => {
         if (!token) return;
         setLoading(true);
         try {
@@ -35,16 +37,16 @@ export const Profile = () => {
             } else {
                 sendToastError(t('profile.profileLoadError'));
             }
-        } catch (err) {
+        } catch {
             sendToastError(t('profile.profileLoadError'));
         } finally {
             setLoading(false);
         }
-    };
+    }, [t, token]);
 
     useEffect(() => {
         fetchMe();
-    }, [token]);
+    }, [fetchMe]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -61,7 +63,7 @@ export const Profile = () => {
                 prenom: form.prenom,
                 email: form.email
             });
-            if (res.data != null || res.success) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('profile.profileUpdateSuccess'));
                 setEditing(false);
                 fetchMe();
@@ -69,7 +71,7 @@ export const Profile = () => {
                 sendToastError(res.message || t('profile.profileUpdateError'));
             }
         } catch (err) {
-            sendToastError(t('profile.profileUpdateError'));
+            sendToastError(getApiErrorMessage(err, t('profile.profileUpdateError')));
         } finally {
             setSaving(false);
         }
@@ -103,17 +105,7 @@ export const Profile = () => {
         <Layout>
             <div className="page-content">
                 <div className="container-fluid">
-                    <div className="row">
-                        <div className="col-sm-12">
-                            <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">{t('profile.title')}</h4>
-                                <ol className="breadcrumb mb-0">
-                                    <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">{t('nav.profile')}</li>
-                                </ol>
-                            </div>
-                        </div>
-                    </div>
+                    <PageHeader title={t('profile.title')} breadcrumbLabel={t('nav.profile')} />
                     <div className="row">
                         <div className="col-lg-6">
                             <div className="card">

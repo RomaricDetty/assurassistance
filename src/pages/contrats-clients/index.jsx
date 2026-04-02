@@ -9,13 +9,13 @@ import {
     getTemplateUrl,
     fillPdfContrat,
     getContratFileName,
-    downloadBlob,
-    listPdfFormFieldNames
+    downloadBlob
 } from '../../utils/pdfContrat';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { useI18n } from '../../i18n';
+import { PageHeader } from '../../components/page-header';
 
 const INITIAL_FORM = {
     prenom: '',
@@ -33,7 +33,7 @@ const isDuplicateError = (res) => {
 /** Message d'erreur affiché pour un doublon. */
 const getDuplicateMessage = (res) => {
     if (res?.message?.trim()) return res.message;
-    return 'Ce client existe deja.';
+    return null;
 };
 
 /** Normalise le type de contrat (Excel ou API) vers Business, Premier ou Platinum. */
@@ -79,8 +79,6 @@ export const ContratsClients = () => {
     /** Progression affichée pendant l'import Excel : { phase, current, total }. */
     const [excelProgress, setExcelProgress] = useState(null);
     const [errors, setErrors] = useState({});
-    const [pdfFieldNames, setPdfFieldNames] = useState(null);
-    const [loadingFields, setLoadingFields] = useState(false);
     const fileInputRef = useRef(null);
 
     const handleChange = (e) => {
@@ -104,29 +102,6 @@ export const ContratsClients = () => {
         idCarte: formData.idCarte || '',
         typeContrat: normalizeTypeContrat(formData.typeContrat)
     });
-
-    /** Liste les noms des champs du PDF sélectionné (diagnostic). */
-    const handleListPdfFields = async () => {
-        const type = formData.typeContrat;
-        if (!type) {
-            sendToastError(t('contractsClients.selectContractTypeFirst'));
-            return;
-        }
-        setLoadingFields(true);
-        setPdfFieldNames(null);
-        try {
-            const url = getTemplateUrl(type);
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(t('contractsClients.templateNotFound'));
-            const buffer = await res.arrayBuffer();
-            const { names, count } = await listPdfFormFieldNames(buffer);
-            setPdfFieldNames({ names, count, type });
-        } catch (err) {
-            sendToastError(err.message || t('contractsClients.generateError'));
-        } finally {
-            setLoadingFields(false);
-        }
-    };
 
     /** Génère et télécharge un fichier Excel avec les colonnes attendues et des données d'exemple. */
     const handleDownloadExcelTemplate = () => {
@@ -158,7 +133,9 @@ export const ContratsClients = () => {
             };
             const createRes = await createClient(token, payload);
             if (!createRes.data && !createRes.success) {
-                const msg = isDuplicateError(createRes) ? getDuplicateMessage(createRes) : (createRes.message || t('contractsClients.saveClientError'));
+                const msg = isDuplicateError(createRes)
+                    ? (getDuplicateMessage(createRes) || t('contractsClients.duplicateClient'))
+                    : (createRes.message || t('contractsClients.saveClientError'));
                 sendToastError(msg);
                 return;
             }
@@ -323,7 +300,7 @@ export const ContratsClients = () => {
                     try {
                         const res = await fetch(getTemplateUrl(t.value));
                         if (res.ok) templateCache.set(t.value, await res.arrayBuffer());
-                    } catch (_) { /* ignorer */ }
+                    } catch { /* ignorer */ }
                 }
 
                 for (let start = 0; start < total; start += CHUNK_SIZE) {
@@ -338,7 +315,7 @@ export const ContratsClients = () => {
                             try {
                                 const filled = await fillPdfContrat(bufferCopy, pdfData);
                                 return { pdfData, filled };
-                            } catch (_) {
+                            } catch {
                                 return null;
                             }
                         })
@@ -391,17 +368,7 @@ export const ContratsClients = () => {
         <Layout>
             <div className="page-content">
                 <div className="container-fluid">
-                    <div className="row">
-                        <div className="col-sm-12">
-                            <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">{t('contractsClients.title')}</h4>
-                                <ol className="breadcrumb mb-0">
-                                    <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">{t('contractsClients.title')}</li>
-                                </ol>
-                            </div>
-                        </div>
-                    </div>
+                    <PageHeader title={t('contractsClients.title')} />
 
                     <div className="row">
                         <div className="col-lg-6">
@@ -468,19 +435,6 @@ export const ContratsClients = () => {
                                             {loadingFields ? '...' : 'Voir les champs du PDF'}
                                         </button> */}
                                     </form>
-                                    {pdfFieldNames && (
-                                        <div className="mt-3 p-3 bg-light rounded small">
-                                            <strong>{t('contractsClients.pdfFieldsTitle', { type: pdfFieldNames.type, count: pdfFieldNames.count })}</strong>
-                                            {pdfFieldNames.count === 0 ? (
-                                                <p className="text-warning mb-0 mt-1">{t('contractsClients.noAcroForm')}</p>
-                                            ) : (
-                                                <>
-                                                    <p className="text-muted mb-1 mt-1">{t('contractsClients.detectedNames')}</p>
-                                                    <pre className="mb-0 text-break" style={{ maxHeight: '200px', overflow: 'auto' }}>{pdfFieldNames.names.join('\n')}</pre>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         </div>

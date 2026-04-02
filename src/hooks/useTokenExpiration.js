@@ -3,10 +3,15 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logOut } from '../store/actions/authentication';
 import { jwtDecode } from 'jwt-decode';
 import { sendToastError } from '../helpers';
+import { useI18n } from '../i18n';
 
+/**
+ * Déconnecte automatiquement l'utilisateur si le token JWT est expiré.
+ */
 export const useTokenExpiration = () => {
     const dispatch = useDispatch();
     const token = useSelector(state => state.auth.token);
+    const { t } = useI18n();
     useEffect(() => {
         const checkTokenExpiration = () => {
             if (!token) return;
@@ -17,11 +22,11 @@ export const useTokenExpiration = () => {
                 const currentTime = Date.now() / 1000;
                 if (exp < currentTime) {
                     dispatch(logOut());
-                    sendToastError("Votre session a expiré, veuillez vous reconnecter");
+                    sendToastError(t('login.sessionExpired'));
                 }
-            } catch (error) {
+            } catch {
                 dispatch(logOut());
-                sendToastError("Une erreur est survenue lors de la vérification du token, veuillez vous reconnecter");
+                sendToastError(t('login.tokenCheckError'));
             }
         };
 
@@ -33,5 +38,5 @@ export const useTokenExpiration = () => {
 
         // Nettoyer l'intervalle lors du démontage du composant
         return () => clearInterval(interval);
-    }, [dispatch, token]);
+    }, [dispatch, t, token]);
 };

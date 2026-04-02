@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
+import { PageHeader } from '../../components/page-header';
 import { listAdministrateurs, updateAdministrateur } from '../../services/administrateurs';
 import {
     listPartenaires,
@@ -18,6 +19,7 @@ import {
 } from '../../services/accessControl';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
+import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 
 const INTERFACE_LINK_OPTIONS = [
     { path: '/', labelKey: 'administration.pageDashboard' },
@@ -77,45 +79,45 @@ export const AdministrationGroupes = () => {
     };
 
     /** Charge partenaires + groupes pour la page de gestion des accès. */
-    const fetchAccessControlData = async () => {
+    const fetchAccessControlData = useCallback(async () => {
         if (!token) return;
         setLoading(true);
         try {
             const [partnersRes, groupsRes] = await Promise.all([listPartenaires(token), listGroupesAdmin(token)]);
-            const partnersList = Array.isArray(partnersRes.data) ? partnersRes.data : partnersRes.data?.partenaires ?? [];
-            const groupsList = Array.isArray(groupsRes.data) ? groupsRes.data : groupsRes.data?.groupes ?? groupsRes.data?.groupesAdmin ?? [];
+            const partnersList = extractList(partnersRes, ['partenaires']);
+            const groupsList = extractList(groupsRes, ['groupes', 'groupesAdmin']);
             setPartners(partnersList);
             setGroups(groupsList);
-        } catch (_) {
+        } catch {
             sendToastError(t('administration.loadGroupsError'));
         } finally {
             setLoading(false);
         }
-    };
+    }, [t, token]);
 
     useEffect(() => {
         fetchAccessControlData();
-    }, [token]);
+    }, [fetchAccessControlData]);
 
     /** Charge la liste des agents (admins avec role AGENT). */
-    const fetchAgents = async () => {
+    const fetchAgents = useCallback(async () => {
         if (!token) return;
         setLoadingAgents(true);
         try {
             const res = await listAdministrateurs(token, { page: 1, limit: 1000 });
-            const list = Array.isArray(res.data) ? res.data : res.data?.administrateurs ?? res.data?.data ?? [];
+            const list = extractList(res, ['administrateurs']);
             const onlyAgents = list.filter((a) => String(a.role || '').toUpperCase() === 'AGENT');
             setAgents(onlyAgents);
-        } catch (_) {
+        } catch {
             setAgents([]);
         } finally {
             setLoadingAgents(false);
         }
-    };
+    }, [token]);
 
     useEffect(() => {
         fetchAgents();
-    }, [token]);
+    }, [fetchAgents]);
 
     useEffect(() => {
         if (!token || !selectedCardsGroupId) {
@@ -148,13 +150,13 @@ export const AdministrationGroupes = () => {
         e.preventDefault();
         try {
             const res = await createPartenaire(token, partnerForm);
-            if (res.data != null || res.success) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.partnerCreated'));
                 setPartnerForm({ nom: '', contact: '', adresse: '', isActive: true });
                 fetchAccessControlData();
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         }
     };
 
@@ -168,7 +170,7 @@ export const AdministrationGroupes = () => {
                 validTo: groupForm.validTo ? new Date(groupForm.validTo).toISOString() : null
             };
             const res = await createGroupeAdmin(token, payload);
-            if (res?.success !== false) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.groupCreated'));
                 const createdGroupId = res.data?.id ?? res.data?.groupeId ?? null;
                 if (createdGroupId) {
@@ -178,7 +180,7 @@ export const AdministrationGroupes = () => {
                 fetchAccessControlData();
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         }
     };
 
@@ -190,7 +192,7 @@ export const AdministrationGroupes = () => {
         if (cartes.length === 0) return;
         try {
             const res = await addCartesAutorisees(token, selectedCardsGroupId, cartes);
-            if (res?.success !== false) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.cardsAdded'));
                 setCardsInput('');
                 const refresh = await listCartesAutorisees(token, selectedCardsGroupId);
@@ -201,7 +203,7 @@ export const AdministrationGroupes = () => {
                 }
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         }
     };
 
@@ -231,7 +233,7 @@ export const AdministrationGroupes = () => {
                 userValidTo: agentForm.userValidTo ? new Date(agentForm.userValidTo).toISOString() : null
             };
             const res = await createAgentForGroupe(token, selectedAgentGroupId, payload);
-            if (res.data != null || res.success) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.agentCreated'));
                 setAgentForm({
                     login: '',
@@ -247,7 +249,7 @@ export const AdministrationGroupes = () => {
                 fetchAgents();
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         }
     };
 
@@ -292,13 +294,13 @@ export const AdministrationGroupes = () => {
         if (!editingPartner?.id) return;
         try {
             const res = await updatePartenaire(token, editingPartner.id, partnerEditForm);
-            if (res.data != null || res.success) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.partnerUpdated'));
                 setEditingPartner(null);
                 fetchAccessControlData();
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         }
     };
 
@@ -325,13 +327,13 @@ export const AdministrationGroupes = () => {
                 validTo: groupEditForm.validTo ? new Date(groupEditForm.validTo).toISOString() : null
             };
             const res = await updateGroupeAdmin(token, editingGroup.id, payload);
-            if (res.data != null || res.success) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.groupUpdated'));
                 setEditingGroup(null);
                 fetchAccessControlData();
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         }
     };
 
@@ -346,13 +348,13 @@ export const AdministrationGroupes = () => {
                 userValidTo: agentEditForm.userValidTo ? new Date(agentEditForm.userValidTo).toISOString() : null
             };
             const res = await updateAdministrateur(token, editingAgent.id, payload);
-            if (res.data != null || res.success) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.agentDatesUpdated'));
                 setEditingAgent(null);
                 fetchAgents();
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         } finally {
             setSavingAgentDates(false);
         }
@@ -364,7 +366,7 @@ export const AdministrationGroupes = () => {
         setDeletingCard(true);
         try {
             const res = await removeCartesAutorisees(token, selectedCardsGroupId, [cardToDelete]);
-            if (res?.success !== false) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('administration.cardDeleted'));
                 setCardToDelete(null);
                 const refresh = await listCartesAutorisees(token, selectedCardsGroupId);
@@ -377,7 +379,7 @@ export const AdministrationGroupes = () => {
                 sendToastError(res.message || t('administration.cardDeleteError'));
             }
         } catch (err) {
-            sendToastError(err.message || t('administration.cardDeleteError'));
+            sendToastError(getApiErrorMessage(err, t('administration.cardDeleteError')));
         } finally {
             setDeletingCard(false);
         }
@@ -387,19 +389,9 @@ export const AdministrationGroupes = () => {
         <Layout>
             <div className="page-content">
                 <div className="container-fluid">
-                    <div className="row">
-                        <div className="col-sm-12">
-                            <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">{t('administration.groupsSection')}</h4>
-                                <ol className="breadcrumb mb-0">
-                                    <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">{t('administration.groupsSection')}</li>
-                                </ol>
-                            </div>
-                        </div>
-                    </div>
+                    <PageHeader title={t('administration.groupsSection')} />
 
-                    <div className="alert alert-info small">
+                    <div className="alert alert-info small mb-3 mb-md-4">
                         <strong>{t('administration.stepsTitle')}</strong>
                         <ol className="mb-0 mt-2 ps-3">
                             <li>{t('administration.steps1')}</li>
@@ -410,9 +402,9 @@ export const AdministrationGroupes = () => {
                     </div>
 
                     <div className="card">
-                        <div className="card-header d-flex justify-content-between align-items-center">
+                        <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                             <h5 className="card-title mb-0">{t('administration.groupsSection')}</h5>
-                            <button type="button" className="btn btn-outline-secondary btn-sm" onClick={fetchAccessControlData}>
+                            <button type="button" className="btn btn-outline-secondary btn-sm w-100 w-sm-auto" onClick={fetchAccessControlData}>
                                 {t('administration.refresh')}
                             </button>
                         </div>
@@ -421,31 +413,34 @@ export const AdministrationGroupes = () => {
                                 <div className="text-center py-3"><Loader /></div>
                             ) : (
                                 <div className="row g-3">
-                                    <div className="col-lg-4">
+                                    <div className="col-12 col-lg-4">
+                                        <div className="border rounded p-3 h-100">
                                         <h6 className="mb-2">1. {t('administration.partners')}</h6>
                                         <p className="text-muted small mb-2">{t('administration.partnersHelp')}</p>
                                         <form onSubmit={handleCreatePartner}>
                                             <input className="form-control mb-2" placeholder={t('administration.partnerName')} value={partnerForm.nom} onChange={(e) => setPartnerForm((p) => ({ ...p, nom: e.target.value }))} />
                                             <input className="form-control mb-2" placeholder={t('administration.contact')} value={partnerForm.contact} onChange={(e) => setPartnerForm((p) => ({ ...p, contact: e.target.value }))} />
                                             <input className="form-control mb-2" placeholder={t('administration.address')} value={partnerForm.adresse} onChange={(e) => setPartnerForm((p) => ({ ...p, adresse: e.target.value }))} />
-                                            <button className="btn btn-primary btn-sm" type="submit">{t('administration.createPartner')}</button>
+                                            <button className="btn btn-primary btn-sm w-100 w-sm-auto" type="submit">{t('administration.createPartner')}</button>
                                         </form>
                                         <div className="mt-2 border rounded p-2">
                                             <div className="small text-muted mb-2">{partners.length} partenaire(s)</div>
                                             <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
                                                 {partners.map((p) => (
-                                                    <div key={p.id} className="d-flex justify-content-between align-items-center border rounded p-2 mb-1 gap-2">
+                                                    <div key={p.id} className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center border rounded p-2 mb-1 gap-2">
                                                         <span className="small text-truncate" style={{ minWidth: 0 }}>{p.nom}</span>
-                                                        <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0" onClick={() => openPartnerModal(p)}>
+                                                        <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0 w-100 w-sm-auto" onClick={() => openPartnerModal(p)}>
                                                             {t('administration.editPartner')}
                                                         </button>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
+                                        </div>
                                     </div>
 
-                                    <div className="col-lg-4">
+                                    <div className="col-12 col-lg-4">
+                                        <div className="border rounded p-3 h-100">
                                         <h6 className="mb-2">2. {t('administration.groups')}</h6>
                                         <p className="text-muted small mb-2">{t('administration.groupsHelp')}</p>
                                         <form onSubmit={handleCreateGroup}>
@@ -458,24 +453,26 @@ export const AdministrationGroupes = () => {
                                             <input type="datetime-local" className="form-control mb-2" value={groupForm.validFrom} onChange={(e) => setGroupForm((g) => ({ ...g, validFrom: e.target.value }))} />
                                             <label className="form-label small">{t('administration.validTo')}</label>
                                             <input type="datetime-local" className="form-control mb-2" value={groupForm.validTo} onChange={(e) => setGroupForm((g) => ({ ...g, validTo: e.target.value }))} />
-                                            <button className="btn btn-primary btn-sm" type="submit">{t('administration.createGroup')}</button>
+                                            <button className="btn btn-primary btn-sm w-100 w-sm-auto" type="submit">{t('administration.createGroup')}</button>
                                         </form>
                                         <div className="mt-2 border rounded p-2">
                                             <div className="small text-muted mb-2">{groups.length} groupe(s)</div>
                                             <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
                                                 {groups.map((g) => (
-                                                    <div key={g.id} className="d-flex justify-content-between align-items-center border rounded p-2 mb-1 gap-2">
+                                                    <div key={g.id} className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center border rounded p-2 mb-1 gap-2">
                                                         <span className="small text-truncate" style={{ minWidth: 0 }}>{g.nom}</span>
-                                                        <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0" onClick={() => openGroupModal(g)}>
+                                                        <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0 w-100 w-sm-auto" onClick={() => openGroupModal(g)}>
                                                             {t('administration.editGroup')}
                                                         </button>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
+                                        </div>
                                     </div>
 
-                                    <div className="col-lg-4">
+                                    <div className="col-12 col-lg-4">
+                                        <div className="border rounded p-3 h-100">
                                         <h6 className="mb-2">3. {t('administration.cards')}</h6>
                                         <p className="text-muted small mb-2">{t('administration.cardsHelp')}</p>
                                         <div className="border rounded p-2 mb-2">
@@ -492,7 +489,7 @@ export const AdministrationGroupes = () => {
                                         </div>
                                         <form onSubmit={handleAddCards}>
                                             <textarea className="form-control mb-2" rows={5} placeholder={t('administration.cardsOnePerLine')} value={cardsInput} onChange={(e) => setCardsInput(e.target.value)} />
-                                            <button className="btn btn-primary btn-sm" type="submit" disabled={!selectedCardsGroupId}>{t('administration.addCards')}</button>
+                                            <button className="btn btn-primary btn-sm w-100 w-sm-auto" type="submit" disabled={!selectedCardsGroupId}>{t('administration.addCards')}</button>
                                         </form>
                                         <p className="text-muted small mb-1 mt-2">{t('administration.cardsGroupCurrentList')}</p>
                                         <div className="small text-muted mb-2">{groupCards.length} carte(s)</div>
@@ -521,9 +518,11 @@ export const AdministrationGroupes = () => {
                                                 </div>
                                             )}
                                         </div>
+                                        </div>
                                     </div>
 
                                     <div className="col-12">
+                                        <div className="border rounded p-3">
                                         <h6 className="mb-2">4. {t('administration.createAgent')}</h6>
                                         <p className="text-muted small mb-2">{t('administration.agentHelp')}</p>
                                         <div className="border rounded p-2 mb-2">
@@ -572,10 +571,11 @@ export const AdministrationGroupes = () => {
                                                     <small className="text-muted d-block mt-2">{t('administration.agentDefaultLinks')}</small>
                                                 </div>
                                             </div>
-                                            <div className="col-md-3 mt-2">
+                                            <div className="col-12 col-md-3 mt-2">
                                                 <button className="btn btn-primary w-100" type="submit" disabled={!selectedAgentGroupId}>{t('administration.createAgent')}</button>
                                             </div>
                                         </form>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -628,7 +628,7 @@ export const AdministrationGroupes = () => {
 
                                     <div className="d-md-none">
                                         {agents.map((a) => (
-                                            <div key={a.id} className="border rounded p-2 mb-2">
+                                            <div key={a.id} className="border rounded p-3 mb-2">
                                                 <div className="fw-semibold">{a.login}</div>
                                                 <div className="small text-muted">{a.prenom} {a.nom}</div>
                                                 <div className="small">{t('administration.groupName')}: {a.groupeAdmin?.nom || a.groupeNom || '-'}</div>
@@ -650,7 +650,7 @@ export const AdministrationGroupes = () => {
 
             {editingAgent && (
                 <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
+                    <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                         <div className="modal-content">
                             <div className="modal-header">
                                 <h5 className="modal-title">{t('administration.editAgentDatesTitle')}</h5>
@@ -679,7 +679,7 @@ export const AdministrationGroupes = () => {
 
             {editingPartner && (
                 <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
+                    <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                         <div className="modal-content">
                             <div className="modal-header">
                                 <h5 className="modal-title">{t('administration.editPartner')}</h5>
@@ -703,7 +703,7 @@ export const AdministrationGroupes = () => {
 
             {editingGroup && (
                 <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
+                    <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                         <div className="modal-content">
                             <div className="modal-header">
                                 <h5 className="modal-title">{t('administration.editGroup')}</h5>
@@ -733,7 +733,7 @@ export const AdministrationGroupes = () => {
 
             {cardToDelete && (
                 <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
+                    <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                         <div className="modal-content">
                             <div className="modal-header">
                                 <h5 className="modal-title">{t('administration.deleteCardTitle')}</h5>

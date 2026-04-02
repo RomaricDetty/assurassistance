@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
+import { PageHeader } from '../../components/page-header';
 import { listClients, updateClient, deleteClient } from '../../services/clients';
 import { TYPES_CONTRAT, getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob } from '../../utils/pdfContrat';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import JSZip from 'jszip';
 import { useI18n } from '../../i18n';
+import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 
 /** Mappe un client API vers les données attendues par fillPdfContrat. */
 const normalizeTypeContrat = (raw) => {
@@ -70,27 +72,27 @@ export const Clients = () => {
         );
     }, [clients, searchTerm]);
 
-    const fetchList = async (pageNum = page, limitNum = limit) => {
+    const fetchList = useCallback(async (pageNum = page, limitNum = limit) => {
         if (!token) return;
         setLoading(true);
         try {
             const res = await listClients(token, { page: pageNum, limit: limitNum });
-            const list = Array.isArray(res.data) ? res.data : res.data?.clients ?? res.data?.data ?? [];
+            const list = extractList(res, ['clients']);
             setClients(list);
             const meta = res.meta || {};
             setTotal(meta.total ?? list.length);
             setTotalPages(meta.totalPages ?? Math.max(1, Math.ceil((meta.total ?? list.length) / (meta.limit ?? limitNum))));
-        } catch (err) {
+        } catch {
             sendToastError(t('clients.loadingListError'));
             setClients([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, [limit, page, t, token]);
 
     useEffect(() => {
         fetchList(page, limit);
-    }, [token, page, limit]);
+    }, [fetchList, limit, page, token]);
 
     /** Réinitialise la sélection lors du changement de page ou de limite. */
     useEffect(() => {
@@ -131,7 +133,7 @@ export const Clients = () => {
             setSelectedIds([]);
             setShowBulkDeleteModal(false);
             fetchList(page, limit);
-        } catch (err) {
+        } catch {
             sendToastError(t('clients.bulkDeleteError'));
         } finally {
             setDeleteBulkProgress(null);
@@ -161,14 +163,14 @@ export const Clients = () => {
         setSaving(true);
         try {
             const res = await updateClient(token, editingId, form);
-            if (res.data != null || res.success) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('clients.updateSuccess'));
                 closeModal();
                 fetchList(page, limit);
             } else {
                 sendToastError(res.message || t('clients.updateError'));
             }
-        } catch (err) {
+        } catch {
             sendToastError(t('clients.updateError'));
         } finally {
             setSaving(false);
@@ -218,7 +220,7 @@ export const Clients = () => {
                 try {
                     const res = await fetch(getTemplateUrl(t.value));
                     if (res.ok) templateCache.set(t.value, await res.arrayBuffer());
-                } catch (_) { /* ignorer */ }
+                } catch { /* ignorer */ }
             }
             const usedNames = new Set();
             const zipBlobs = [];
@@ -236,7 +238,7 @@ export const Clients = () => {
                         try {
                             const filled = await fillPdfContrat(bufferCopy, pdfData);
                             return { pdfData, filled };
-                        } catch (_) {
+                        } catch {
                             return null;
                         }
                     })
@@ -280,7 +282,7 @@ export const Clients = () => {
                 ? t('clients.zipDoneMulti', { count, archives: zipBlobs.length })
                 : t('clients.zipDoneSingle', { count }));
         } catch (err) {
-            sendToastError(err.message || t('clients.generateError'));
+            sendToastError(getApiErrorMessage(err, t('clients.generateError')));
         } finally {
             setGenerateProgress(null);
             setGeneratingAll(false);
@@ -293,14 +295,14 @@ export const Clients = () => {
         setDeleting(true);
         try {
             const res = await deleteClient(token, clientToDelete.id);
-            if (res.success !== false && (res.data != null || res.message === undefined)) {
+            if (isApiSuccess(res)) {
                 sendToastSuccess(t('clients.clientDeleted'));
                 setClientToDelete(null);
                 fetchList(page, limit);
             } else {
                 sendToastError(res.message || t('clients.deleteError'));
             }
-        } catch (err) {
+        } catch {
             sendToastError(t('clients.deleteError'));
         } finally {
             setDeleting(false);
@@ -311,17 +313,7 @@ export const Clients = () => {
         <Layout>
             <div className="page-content">
                 <div className="container-fluid">
-                    <div className="row">
-                        <div className="col-sm-12">
-                            <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">{t('clients.title')}</h4>
-                                <ol className="breadcrumb mb-0">
-                                    <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">{t('clients.title')}</li>
-                                </ol>
-                            </div>
-                        </div>
-                    </div>
+                    <PageHeader title={t('clients.title')} />
                     <div className="row">
                         <div className="col-12">
                             <div className="card">

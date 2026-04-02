@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
+import { PageHeader } from '../../components/page-header';
+import { AdminFormModal } from '../../components/admin-form-modal';
 import {
     listAdministrateurs,
     createAdministrateur,
@@ -12,6 +14,7 @@ import {
 } from '../../services/administrateurs';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
+import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 
 const INITIAL_FORM = {
     login: '',
@@ -48,27 +51,27 @@ export const Administration = () => {
         return normalizedRole === 'AGENT' ? t('administration.roleAgent') : t('administration.roleSuperAdmin');
     };
 
-    const fetchList = async (pageNum = page, limitNum = limit) => {
+    const fetchList = useCallback(async (pageNum = page, limitNum = limit) => {
         if (!token) return;
         setLoading(true);
         try {
             const res = await listAdministrateurs(token, { page: pageNum, limit: limitNum });
-            const list = Array.isArray(res.data) ? res.data : res.data?.administrateurs ?? res.data?.data ?? [];
+            const list = extractList(res, ['administrateurs']);
             setAdmins(list);
             const meta = res.meta || {};
             setTotal(meta.total ?? list.length);
             setTotalPages(meta.totalPages ?? Math.max(1, Math.ceil((meta.total ?? list.length) / (meta.limit ?? limitNum))));
-        } catch (err) {
+        } catch {
             sendToastError(t('administration.loadingAdminsError'));
             setAdmins([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, [limit, page, t, token]);
 
     useEffect(() => {
         fetchList(page, limit);
-    }, [token, page, limit]);
+    }, [fetchList, limit, page, token]);
 
 
     const handleChange = (e) => {
@@ -114,7 +117,7 @@ export const Administration = () => {
                     isActive: a.isActive ?? true
                 });
             }
-        } catch (err) {
+        } catch {
             sendToastError(t('administration.loadingAdminError'));
         } finally {
             setSaving(false);
@@ -138,7 +141,7 @@ export const Administration = () => {
                 const payload = { nom: form.nom, prenom: form.prenom, email: form.email, isActive: form.isActive };
                 if (form.password?.trim()) payload.password = form.password;
                 const res = await updateAdministrateur(token, editingId, payload);
-                if (res.data != null || res.success) {
+                if (isApiSuccess(res)) {
                     sendToastSuccess(t('administration.updateSuccess'));
                     closeModal();
                     fetchList(page, limit);
@@ -154,7 +157,7 @@ export const Administration = () => {
                     email: form.email,
                     isActive: form.isActive
                 });
-                if (res.data != null || res.success) {
+                if (isApiSuccess(res)) {
                     sendToastSuccess(t('administration.createSuccess'));
                     closeModal();
                     fetchList(page, limit);
@@ -163,7 +166,7 @@ export const Administration = () => {
                 }
             }
         } catch (err) {
-            sendToastError(err.message || t('administration.genericError'));
+            sendToastError(getApiErrorMessage(err, t('administration.genericError')));
         } finally {
             setSaving(false);
         }
@@ -174,17 +177,7 @@ export const Administration = () => {
         <Layout>
             <div className="page-content">
                 <div className="container-fluid">
-                    <div className="row">
-                        <div className="col-sm-12">
-                            <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">{t('administration.title')}</h4>
-                                <ol className="breadcrumb mb-0">
-                                    <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">{t('administration.title')}</li>
-                                </ol>
-                            </div>
-                        </div>
-                    </div>
+                    <PageHeader title={t('administration.title')} />
 
                     <div className="row">
                         <div className="col-12">
@@ -271,7 +264,7 @@ export const Administration = () => {
                                                         <button type="button" className="page-link" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>{t('administration.next')}</button>
                                                     </li>
                                                 </ul>
-                                                <span className="ms-2 text-muted small">Page {page} / {totalPages || 1}</span>
+                                                <span className="ms-2 text-muted small">{t('clients.page', { page, total: totalPages || 1 })}</span>
                                             </nav>
                                         </div>
                                     )}
@@ -299,65 +292,16 @@ export const Administration = () => {
                 <Footer />
             </div>
 
-            {showModal && (
-                <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">{editingId ? t('administration.adminTypeEdit') : t('administration.adminTypeCreate')}</h5>
-                                <button type="button" className="btn-close" onClick={closeModal} aria-label={t('common.cancel')} />
-                            </div>
-                            <form onSubmit={handleSubmit}>
-                                <div className="modal-body">
-                                    {saving ? (
-                                        <div className="text-center py-3"><Loader /></div>
-                                    ) : (
-                                        <>
-                                            <div className="mb-3">
-                                                <label className="form-label">{t('administration.login')}</label>
-                                                <input type="text" className={`form-control ${errors.login ? 'is-invalid' : ''}`} name="login" value={form.login} onChange={handleChange} disabled={!!editingId} />
-                                                {errors.login && <div className="invalid-feedback">{errors.login}</div>}
-                                            </div>
-                                            <div className="mb-3">
-                                                <label className="form-label">{t('administration.password')} {editingId && t('administration.passwordHint')}</label>
-                                                <input type="password" className={`form-control ${errors.password ? 'is-invalid' : ''}`} name="password" value={form.password} onChange={handleChange} />
-                                                {errors.password && <div className="invalid-feedback">{errors.password}</div>}
-                                            </div>
-                                            <div className="mb-3">
-                                                <label className="form-label">{t('administration.lastName')}</label>
-                                                <input type="text" className={`form-control ${errors.nom ? 'is-invalid' : ''}`} name="nom" value={form.nom} onChange={handleChange} />
-                                                {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
-                                            </div>
-                                            <div className="mb-3">
-                                                <label className="form-label">{t('administration.firstName')}</label>
-                                                <input type="text" className={`form-control ${errors.prenom ? 'is-invalid' : ''}`} name="prenom" value={form.prenom} onChange={handleChange} />
-                                                {errors.prenom && <div className="invalid-feedback">{errors.prenom}</div>}
-                                            </div>
-                                            <div className="mb-3">
-                                                <label className="form-label">{t('administration.email')}</label>
-                                                <input type="email" className={`form-control ${errors.email ? 'is-invalid' : ''}`} name="email" value={form.email} onChange={handleChange} />
-                                                {errors.email && <div className="invalid-feedback">{errors.email}</div>}
-                                            </div>
-                                            <div className="form-check">
-                                                <input type="checkbox" className="form-check-input" name="isActive" id="adminActive" checked={form.isActive} onChange={handleChange} />
-                                                <label className="form-check-label" htmlFor="adminActive">{t('administration.activeLabel')}</label>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                                <div className="modal-footer">
-                                    <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('common.cancel')}</button>
-                                    {!saving && (
-                                        <button type="submit" className="btn btn-primary">
-                                            {editingId ? t('common.save') : t('common.create')}
-                                        </button>
-                                    )}
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <AdminFormModal
+                visible={showModal}
+                editingId={editingId}
+                saving={saving}
+                form={form}
+                errors={errors}
+                onClose={closeModal}
+                onSubmit={handleSubmit}
+                onChange={handleChange}
+            />
         </Layout>
     );
 };

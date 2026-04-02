@@ -109,7 +109,7 @@ export const Login = () => {
                                                     />
                                                 </a>
                                                 {/* <h4 className="mt-3 mb-1 fw-semibold fs-18">
-                                                    Assur'Assistance
+                                                    {t('common.appName')}
                                                 </h4> */}
                                                 <p className="text-muted fw-medium mb-0 mt-3">
                                                     {t('login.subtitle')}

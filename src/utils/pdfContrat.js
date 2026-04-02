@@ -79,19 +79,10 @@ export async function listPdfFormFieldNames(pdfBytes) {
                 if (n) names.push(n);
             });
         }
-    } catch (_) {
+    } catch {
         // ignore
     }
     return { names, count: names.length };
-}
-
-/**
- * Formate une date YYYY-MM-DD en DD/MM/YYYY pour affichage dans le PDF.
- */
-function formatDateForPdf(dateStr) {
-    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr || '';
-    const [y, m, d] = dateStr.split('-');
-    return `${d}/${m}/${y}`;
 }
 
 /**
@@ -127,7 +118,7 @@ const MAX_LENGTH_BY_FIELD = {
 };
 
 /** Découpe un texte en 2 lignes maximum selon une longueur de ligne donnée. */
-function splitTextInTwoLines(value, maxLenPerLine) {
+export function splitTextInTwoLines(value, maxLenPerLine) {
     const text = String(value ?? '').trim();
     if (!text) return [];
     const firstChunk = text.substring(0, maxLenPerLine);
@@ -200,7 +191,6 @@ function drawTextOverlay(doc, data) {
  */
 export async function fillPdfContrat(pdfBytes, data) {
     const doc = await PDFDocument.load(pdfBytes);
-    let formFilled = false;
 
     try {
         const form = doc.getForm();
@@ -219,7 +209,6 @@ export async function fillPdfContrat(pdfBytes, data) {
                 if (field) {
                     if (field.constructor.name === 'PDFTextField') {
                         field.setText(String(value));
-                        formFilled = true;
                     }
                     if (field.constructor.name === 'PDFCheckBox' && (value === '1' || value === 'Oui' || value === 'X' || value === 'x')) {
                         field.check();
@@ -227,7 +216,7 @@ export async function fillPdfContrat(pdfBytes, data) {
                 }
             }
         }
-    } catch (_) {
+    } catch {
         // ignore
     }
 

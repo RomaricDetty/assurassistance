@@ -24,11 +24,6 @@ export const Sidebar = ({ isOpen }) => {
         return location.pathname === path;
     };
 
-    // Fonction pour vérifier si un parent est actif (pour les sous-menus)
-    const isParentActive = (paths) => {
-        return paths.some(path => location.pathname.startsWith(path));
-    };
-
     return (
         <div className={`startbar d-print-none ${isOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`} style={{zIndex: 1000}} >
             {/* start brand */}
@@ -42,7 +37,7 @@ export const Sidebar = ({ isOpen }) => {
                         <img src={LogoMark} alt="logo-large" className="logo-lg logo-dark" />
                     </span>
                 </Link>
-                <p className={isOpen ? '' : 'd-none'} style={{ marginBottom: '0px', marginLeft: '10px' }}> Assur'Assistance</p>
+                <p className={isOpen ? '' : 'd-none'} style={{ marginBottom: '0px', marginLeft: '10px' }}> {t('common.appName')}</p>
             </div>
             {/* end brand */}
 

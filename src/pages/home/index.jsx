@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
 import { Loader } from '../../components/loader';
+import { PageHeader } from '../../components/page-header';
 import { listClients } from '../../services/clients';
 import { TYPES_CONTRAT } from '../../utils/pdfContrat';
 import { sendToastError } from '../../helpers';
@@ -80,17 +81,7 @@ export const Home = () => {
         <Layout>
             <div className="page-content">
                 <div className="container-fluid">
-                    <div className="row">
-                        <div className="col-sm-12">
-                            <div className="page-title-box d-md-flex justify-content-md-between align-items-center">
-                                <h4 className="page-title">{t('home.title')}</h4>
-                                <ol className="breadcrumb mb-0">
-                                    <li className="breadcrumb-item"><a href="/">Assur&apos;Assistance</a></li>
-                                    <li className="breadcrumb-item active">{t('home.title')}</li>
-                                </ol>
-                            </div>
-                        </div>
-                    </div>
+                    <PageHeader title={t('home.title')} />
 
                     {loading ? (
                         <div className="text-center py-5"><Loader /></div>

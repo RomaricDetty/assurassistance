@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
 
 const STORAGE_KEY = 'lang';
 const FALLBACK_LANG = 'en';
@@ -6,6 +6,7 @@ const FALLBACK_LANG = 'en';
 const messages = {
     en: {
         common: {
+            appName: "Assur'Assistance",
             language: 'Language',
             english: 'English',
             french: 'French',
@@ -43,7 +44,9 @@ const messages = {
             success: 'Login successful.',
             welcomeBack: 'Welcome back, {{prenom}}!',
             invalidCredentials: 'Invalid credentials',
-            genericError: 'An error occurred'
+            genericError: 'An error occurred',
+            sessionExpired: 'Your session has expired, please log in again',
+            tokenCheckError: 'An error occurred while checking your token, please log in again'
         },
         home: {
             title: 'Dashboard',
@@ -252,6 +255,7 @@ const messages = {
             templateNotFound: 'Template not found',
             excelDownloaded: 'Excel file downloaded',
             saveClientError: 'Client save error',
+            duplicateClient: 'This client already exists.',
             templatePdfMissing: 'PDF template not found',
             clientSavedAndDownloaded: 'Client saved and contract downloaded',
             generatePdfError: 'Error while generating PDF',
@@ -277,6 +281,7 @@ const messages = {
     },
     fr: {
         common: {
+            appName: "Assur'Assistance",
             language: 'Langue',
             english: 'Anglais',
             french: 'Français',
@@ -314,7 +319,9 @@ const messages = {
             success: 'Connexion réussie.',
             welcomeBack: 'Bon retour, {{prenom}} !',
             invalidCredentials: 'Identifiants incorrects',
-            genericError: 'Une erreur est survenue'
+            genericError: 'Une erreur est survenue',
+            sessionExpired: 'Votre session a expiré, veuillez vous reconnecter',
+            tokenCheckError: 'Une erreur est survenue lors de la vérification du token, veuillez vous reconnecter'
         },
         home: {
             title: 'Tableau de bord',
@@ -525,6 +532,7 @@ const messages = {
             templateNotFound: 'Template introuvable',
             excelDownloaded: 'Fichier Excel téléchargé',
             saveClientError: 'Erreur enregistrement client',
+            duplicateClient: 'Ce client existe deja.',
             templatePdfMissing: 'Template PDF introuvable',
             clientSavedAndDownloaded: 'Client enregistré et contrat téléchargé',
             generatePdfError: 'Erreur lors de la génération du PDF',
@@ -577,20 +585,20 @@ export const I18nProvider = ({ children }) => {
         return saved === 'fr' || saved === 'en' ? saved : FALLBACK_LANG;
     });
 
-    const setLang = (nextLang) => {
+    const setLang = useCallback((nextLang) => {
         const value = nextLang === 'fr' ? 'fr' : 'en';
         setLangState(value);
         if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, value);
-    };
+    }, []);
 
-    const t = (key, vars) => {
+    const t = useCallback((key, vars) => {
         const selected = getMessage(lang, key);
         const fallback = getMessage(FALLBACK_LANG, key);
         const raw = selected ?? fallback ?? key;
         return typeof raw === 'string' ? interpolate(raw, vars) : key;
-    };
+    }, [lang]);
 
-    const value = useMemo(() => ({ lang, setLang, t }), [lang]);
+    const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 
     return React.createElement(I18nContext.Provider, { value }, children);
 };
