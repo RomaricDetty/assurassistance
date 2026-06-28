@@ -8,6 +8,7 @@ import { extractList, isApiSuccess, getApiErrorMessage } from '../src/utils/apiR
 test('extractList supports multiple response shapes', () => {
     assert.deepEqual(extractList({ data: [1, 2] }), [1, 2]);
     assert.deepEqual(extractList({ data: { clients: ['a'] } }, ['clients']), ['a']);
+    assert.deepEqual(extractList({ cartes: ['c1'] }, ['cartes']), ['c1']);
     assert.deepEqual(extractList({ data: { data: ['x'] } }), ['x']);
     assert.deepEqual(extractList({}), []);
 });
@@ -17,6 +18,7 @@ test('extractList supports multiple response shapes', () => {
  */
 test('isApiSuccess handles success flags and payloads', () => {
     assert.equal(isApiSuccess({ success: false }), false);
+    assert.equal(isApiSuccess({ success: true, message: 'OK' }), true);
     assert.equal(isApiSuccess({ data: {} }), true);
     assert.equal(isApiSuccess({ message: undefined }), true);
     assert.equal(isApiSuccess({ message: 'error' }), false);

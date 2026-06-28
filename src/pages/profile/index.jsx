@@ -2,15 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
-import { Loader } from '../../components/loader';
+import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
-import { getAdministrateurMe, updateAdministrateur } from '../../services/administrateurs';
+import { getAdministrateurMe, updateAdministrateurMe } from '../../services/administrateurs';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
 import { getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 
 /**
- * Page Profil : affiche les infos de l'administrateur connecté (GET /administrateurs/me).
+ * Page Profil : affiche et met à jour le profil connecté (GET/PUT /administrateurs/me).
  */
 export const Profile = () => {
     const { t } = useI18n();
@@ -18,7 +18,7 @@ export const Profile = () => {
     const [admin, setAdmin] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(false);
-    const [form, setForm] = useState({ nom: '', prenom: '', email: '', login: '' });
+    const [form, setForm] = useState({ nom: '', prenom: '', email: '', login: '', password: '' });
     const [saving, setSaving] = useState(false);
 
     const fetchMe = useCallback(async () => {
@@ -32,7 +32,8 @@ export const Profile = () => {
                     nom: res.data.nom ?? '',
                     prenom: res.data.prenom ?? '',
                     email: res.data.email ?? '',
-                    login: res.data.login ?? ''
+                    login: res.data.login ?? '',
+                    password: ''
                 });
             } else {
                 sendToastError(t('profile.profileLoadError'));
@@ -55,14 +56,18 @@ export const Profile = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
-        if (!admin?.id) return;
+        if (!token) return;
         setSaving(true);
         try {
-            const res = await updateAdministrateur(token, admin.id, {
+            const payload = {
                 nom: form.nom,
                 prenom: form.prenom,
-                email: form.email
-            });
+                email: form.email,
+                login: form.login
+            };
+            if (form.password?.trim()) payload.password = form.password.trim();
+
+            const res = await updateAdministrateurMe(token, payload);
             if (isApiSuccess(res)) {
                 sendToastSuccess(t('profile.profileUpdateSuccess'));
                 setEditing(false);
@@ -81,9 +86,7 @@ export const Profile = () => {
         return (
             <Layout>
                 <div className="page-content">
-                    <div className="d-flex justify-content-center align-items-center py-5">
-                        <Loader />
-                    </div>
+                    <LoaderContainer />
                 </div>
             </Layout>
         );
@@ -112,16 +115,16 @@ export const Profile = () => {
                                 <div className="card-header d-flex justify-content-between align-items-center">
                                     <h5 className="card-title mb-0">{t('profile.infos')}</h5>
                                     {!editing ? (
-                                        <button type="button" className="btn btn-sm btn-primary" onClick={() => setEditing(true)}>{t('profile.edit')}</button>
+                                        <button type="button" className="btn btn-sm btn-primary" onClick={() => { setForm((prev) => ({ ...prev, password: '' })); setEditing(true); }}>{t('profile.edit')}</button>
                                     ) : (
-                                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditing(false)}>{t('common.cancel')}</button>
+                                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setForm((prev) => ({ ...prev, password: '' })); setEditing(false); }}>{t('common.cancel')}</button>
                                     )}
                                 </div>
                                 <div className="card-body">
                                     <form onSubmit={handleSave}>
                                         <div className="mb-3">
                                             <label className="form-label">{t('administration.login')}</label>
-                                            <input type="text" className="form-control" value={form.login} readOnly disabled />
+                                            <input type="text" className="form-control" name="login" value={form.login} onChange={handleChange} disabled={!editing} />
                                         </div>
                                         <div className="mb-3">
                                             <label className="form-label">{t('profile.lastName')}</label>
@@ -135,6 +138,14 @@ export const Profile = () => {
                                             <label className="form-label">{t('administration.email')}</label>
                                             <input type="email" className="form-control" name="email" value={form.email} onChange={handleChange} disabled={!editing} />
                                         </div>
+                                        {editing && (
+                                            <div className="mb-3">
+                                                <label className="form-label">
+                                                    {t('administration.password')} <span className="text-muted fw-normal">{t('administration.passwordHint')}</span>
+                                                </label>
+                                                <input type="password" className="form-control" name="password" value={form.password} onChange={handleChange} autoComplete="new-password" />
+                                            </div>
+                                        )}
                                         <div className="mb-2">
                                             <span className="text-muted">{t('profile.status')} : </span>
                                             <span className={admin.isActive ? 'text-success' : 'text-secondary'}>{admin.isActive ? t('profile.active') : t('profile.inactive')}</span>

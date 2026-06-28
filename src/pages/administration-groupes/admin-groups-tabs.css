@@ -1,0 +1,18 @@
+/* Badge compteur — lisible que l'onglet Agents soit actif ou non */
+.admin-groups-tab .agents-tab-count {
+    font-size: 0.7rem;
+    min-width: 1.35rem;
+    padding: 0.25em 0.5em;
+    line-height: 1;
+}
+
+.admin-groups-tab .agents-tab-count.is-inactive {
+    background-color: #e4590f !important;
+    color: #ffffff !important;
+}
+
+.admin-groups-tab .agents-tab-count.is-active {
+    background-color: var(--bs-card-bg) !important;
+    color: #e4590f !important;
+    box-shadow: inset 0 0 0 1px #e4590f;
+}

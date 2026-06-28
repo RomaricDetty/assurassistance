@@ -88,7 +88,11 @@ export const addCartesAutorisees = async (token, groupeId, cartes) => {
         headers: authHeaders(token),
         body: JSON.stringify({ cartes })
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+        throw new Error(data?.message || 'Erreur ajout cartes');
+    }
+    return data;
 };
 
 /** Supprime un lot de cartes autorisées d'un groupe. */

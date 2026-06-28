@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader } from '../loader';
+import { LoaderContainer } from '../loader';
 import { useI18n } from '../../i18n';
 
 /**
@@ -29,7 +29,7 @@ export const AdminFormModal = ({
                     <form onSubmit={onSubmit}>
                         <div className="modal-body">
                             {saving ? (
-                                <div className="text-center py-3"><Loader /></div>
+                                <LoaderContainer className="loader-container-compact" />
                             ) : (
                                 <>
                                     <div className="mb-3">

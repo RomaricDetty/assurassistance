@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
-import { Loader } from '../../components/loader';
+import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
 import { listClients, updateClient, deleteClient } from '../../services/clients';
 import { TYPES_CONTRAT, getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob } from '../../utils/pdfContrat';
@@ -11,7 +11,10 @@ import JSZip from 'jszip';
 import { useI18n } from '../../i18n';
 import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 
-/** Mappe un client API vers les données attendues par fillPdfContrat. */
+/** Ordre métier pour le tri par type de contrat. */
+const CONTRACT_TYPE_ORDER = { Business: 1, Premier: 2, Platinum: 3 };
+
+/** Normalise le type de contrat (Business, Premier, Platinum). */
 const normalizeTypeContrat = (raw) => {
     const value = String(raw ?? '').trim().toLowerCase();
     if (value === 'premier') return 'Premier';
@@ -57,8 +60,24 @@ export const Clients = () => {
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
+    const [contractTypeSort, setContractTypeSort] = useState(null);
 
     const TYPES = [{ value: 'Business', label: 'Business' }, { value: 'Premier', label: 'Premier' }, { value: 'Platinum', label: 'Platinum' }];
+
+    /** Bascule le tri par type de contrat : aucun → asc → desc → asc… */
+    const toggleContractTypeSort = () => {
+        setContractTypeSort((prev) => {
+            if (prev === null) return 'asc';
+            return prev === 'asc' ? 'desc' : 'asc';
+        });
+    };
+
+    /** Libellé d'accessibilité du tri par type de contrat. */
+    const contractTypeSortLabel = contractTypeSort === 'asc'
+        ? t('clients.sortContractTypeAsc')
+        : contractTypeSort === 'desc'
+            ? t('clients.sortContractTypeDesc')
+            : t('clients.sortContractType');
 
     /** Filtre les clients de la page courante par prénom, nom, n° carte ou type de contrat. */
     const filteredClients = useMemo(() => {
@@ -71,6 +90,16 @@ export const Clients = () => {
             (c.typeContrat ?? '').toLowerCase().includes(t)
         );
     }, [clients, searchTerm]);
+
+    /** Clients filtrés puis triés par type de contrat si demandé. */
+    const displayedClients = useMemo(() => {
+        if (!contractTypeSort) return filteredClients;
+        return [...filteredClients].sort((a, b) => {
+            const orderA = CONTRACT_TYPE_ORDER[normalizeTypeContrat(a.typeContrat)] ?? 99;
+            const orderB = CONTRACT_TYPE_ORDER[normalizeTypeContrat(b.typeContrat)] ?? 99;
+            return contractTypeSort === 'asc' ? orderA - orderB : orderB - orderA;
+        });
+    }, [filteredClients, contractTypeSort]);
 
     const fetchList = useCallback(async (pageNum = page, limitNum = limit) => {
         if (!token) return;
@@ -106,8 +135,8 @@ export const Clients = () => {
 
     /** Sélectionne ou désélectionne tous les clients visibles (filtrés). */
     const toggleSelectAll = () => {
-        const allSelected = filteredClients.length > 0 && selectedIds.length === filteredClients.length;
-        setSelectedIds(allSelected ? [] : filteredClients.map((c) => c.id));
+        const allSelected = displayedClients.length > 0 && selectedIds.length === displayedClients.length;
+        setSelectedIds(allSelected ? [] : displayedClients.map((c) => c.id));
     };
 
     /** Supprime en masse les clients sélectionnés (par lots pour garder l’UI réactive : 100, 500, 1000…). */
@@ -199,7 +228,7 @@ export const Clients = () => {
 
     /** Génère les PDF des clients visibles (filtrés) ou de toute la page si pas de recherche. */
     const handleGenerateAll = async () => {
-        const toGenerate = filteredClients;
+        const toGenerate = displayedClients;
         if (toGenerate.length === 0) {
             sendToastError(t('clients.noClientToProcess'));
             return;
@@ -327,7 +356,7 @@ export const Clients = () => {
                                             </button>
                                         )}
                                         <div className="d-flex align-items-center gap-2">
-                                            <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || filteredClients.length === 0} title={t('clients.generateVisibleZip')}>
+                                            <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || displayedClients.length === 0} title={t('clients.generateVisibleZip')}>
                                                 <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
                                                 {generatingAll ? (
                                                     <span className="ms-1">{generateProgress ? t('clients.generatingLabel', { current: generateProgress.current.toLocaleString('fr-FR'), total: generateProgress.total.toLocaleString('fr-FR') }) : t('clients.generatingShort')}</span>
@@ -350,34 +379,47 @@ export const Clients = () => {
                                                 aria-label={t('clients.searchPlaceholder')}
                                             />
                                             {searchTerm.trim() && (
-                                                <span className="text-muted small mt-1 d-block">{t('clients.resultsOnPage', { count: filteredClients.length })}</span>
+                                                <span className="text-muted small mt-1 d-block">{t('clients.resultsOnPage', { count: displayedClients.length })}</span>
                                             )}
                                         </div>
                                     )}
                                     {loading ? (
-                                        <div className="text-center py-4"><Loader /></div>
+                                        <LoaderContainer />
                                     ) : (
                                         <div className="table-responsive">
                                             <table className="table table-hover mb-0">
                                                 <thead>
                                                     <tr>
                                                         <th style={{ width: 44 }}>
-                                                            <input type="checkbox" className="form-check-input" checked={filteredClients.length > 0 && selectedIds.length === filteredClients.length} onChange={toggleSelectAll} aria-label={t('clients.selectAll')} title={t('clients.selectAll')} />
+                                                            <input type="checkbox" className="form-check-input" checked={displayedClients.length > 0 && selectedIds.length === displayedClients.length} onChange={toggleSelectAll} aria-label={t('clients.selectAll')} title={t('clients.selectAll')} />
                                                         </th>
                                                         <th>{t('clients.firstNames')}</th>
                                                         <th>{t('clients.lastName')}</th>
                                                         <th>{t('clients.cardId')}</th>
-                                                        <th>{t('clients.contractType')}</th>
+                                                        <th>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-link btn-sm p-0 border-0 text-decoration-none fw-semibold d-inline-flex align-items-center gap-1"
+                                                                onClick={toggleContractTypeSort}
+                                                                aria-label={contractTypeSortLabel}
+                                                                title={contractTypeSortLabel}
+                                                            >
+                                                                {t('clients.contractType')}
+                                                                <span className="text-primary" style={{ fontSize: '0.7rem', lineHeight: 1 }}>
+                                                                    {contractTypeSort === 'asc' ? '▲' : contractTypeSort === 'desc' ? '▼' : '↕'}
+                                                                </span>
+                                                            </button>
+                                                        </th>
                                                         <th width="140">{t('clients.actions')}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {clients.length === 0 ? (
                                                         <tr><td colSpan="6" className="text-center text-muted">{t('clients.noClient')}</td></tr>
-                                                    ) : filteredClients.length === 0 ? (
+                                                    ) : displayedClients.length === 0 ? (
                                                         <tr><td colSpan="6" className="text-center text-muted">{t('clients.noResult', { term: searchTerm.trim() })}</td></tr>
                                                     ) : (
-                                                        filteredClients.map((c) => (
+                                                        displayedClients.map((c) => (
                                                             <tr key={c.id}>
                                                                 <td>
                                                                     <input type="checkbox" className="form-check-input" checked={selectedIds.includes(c.id)} onChange={() => toggleSelect(c.id)} aria-label={`Sélectionner ${c.prenomClient} ${c.nomClient}`} />

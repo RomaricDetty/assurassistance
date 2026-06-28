@@ -83,6 +83,18 @@ export const getAdministrateur = async (token, id) => {
 };
 
 /**
+ * Met à jour le profil de l'administrateur connecté (PUT /administrateurs/me).
+ */
+export const updateAdministrateurMe = async (token, payload) => {
+    const res = await fetch(ADMIN_ME_URL, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify(payload)
+    });
+    return res.json();
+};
+
+/**
  * Met à jour un administrateur (champs optionnels: nom, prenom, email, login, password, isActive).
  */
 export const updateAdministrateur = async (token, id, payload) => {

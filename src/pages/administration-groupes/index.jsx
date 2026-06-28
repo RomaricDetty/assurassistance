@@ -1,9 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
-import { Loader } from '../../components/loader';
+import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
+import { AdminGroupsStepNav } from '../../components/admin-groups-step-nav';
+import { CollapsiblePanel } from '../../components/collapsible-panel';
 import { listAdministrateurs, updateAdministrateur } from '../../services/administrateurs';
 import {
     listPartenaires,
@@ -20,6 +22,8 @@ import {
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
 import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
+import { parseAndValidateCardsInput } from '../../utils/carteAutorisee';
+import './admin-groups-tabs.css';
 
 const INTERFACE_LINK_OPTIONS = [
     { path: '/', labelKey: 'administration.pageDashboard' },
@@ -27,6 +31,8 @@ const INTERFACE_LINK_OPTIONS = [
     { path: '/clients', labelKey: 'administration.pageClients' },
     { path: '/administration', labelKey: 'administration.pageAdministration' }
 ];
+
+const DEFAULT_AGENTS_LIMIT = 10;
 
 /**
  * Page dédiée à la gestion des partenaires, groupes, cartes autorisées et agents.
@@ -41,9 +47,13 @@ export const AdministrationGroupes = () => {
     const [groupCards, setGroupCards] = useState([]);
     const [agentGroupCards, setAgentGroupCards] = useState([]);
     const [cardsInput, setCardsInput] = useState('');
+    const [activeStep, setActiveStep] = useState('partners');
+    const [mainTab, setMainTab] = useState('setup');
     const [loading, setLoading] = useState(false);
     const [agents, setAgents] = useState([]);
     const [loadingAgents, setLoadingAgents] = useState(false);
+    const [agentsPage, setAgentsPage] = useState(1);
+    const [agentsLimit, setAgentsLimit] = useState(DEFAULT_AGENTS_LIMIT);
     const [editingAgent, setEditingAgent] = useState(null);
     const [agentEditForm, setAgentEditForm] = useState({ userValidFrom: '', userValidTo: '' });
     const [savingAgentDates, setSavingAgentDates] = useState(false);
@@ -68,6 +78,25 @@ export const AdministrationGroupes = () => {
     });
     const selectedCardsGroup = groups.find((g) => g.id === selectedCardsGroupId) || null;
     const selectedAgentGroup = groups.find((g) => g.id === selectedAgentGroupId) || null;
+
+    /** Étapes affichées dans la navigation progressive. */
+    const setupSteps = useMemo(() => ([
+        { id: 'partners', number: 1, label: t('administration.partners'), count: partners.length },
+        { id: 'groups', number: 2, label: t('administration.groups'), count: groups.length },
+        { id: 'cards', number: 3, label: t('administration.stepCardsLabel'), count: groupCards.length },
+        { id: 'agent', number: 4, label: t('administration.stepAgentLabel'), count: agents.length }
+    ]), [t, partners.length, groups.length, groupCards.length, agents.length]);
+
+    /** Agents affichés sur la page courante (pagination client). */
+    const agentsTotalPages = Math.max(1, Math.ceil(agents.length / agentsLimit));
+    const paginatedAgents = useMemo(() => {
+        const start = (agentsPage - 1) * agentsLimit;
+        return agents.slice(start, start + agentsLimit);
+    }, [agents, agentsPage, agentsLimit]);
+
+    useEffect(() => {
+        if (agentsPage > agentsTotalPages) setAgentsPage(1);
+    }, [agentsPage, agentsTotalPages]);
 
     /** Convertit une date ISO en format compatible input datetime-local. */
     const toInputDateTime = (value) => {
@@ -125,10 +154,7 @@ export const AdministrationGroupes = () => {
             return;
         }
         listCartesAutorisees(token, selectedCardsGroupId)
-            .then((res) => {
-                const cards = Array.isArray(res.data) ? res.data : res.data?.cartes ?? [];
-                setGroupCards(cards);
-            })
+            .then((res) => setGroupCards(extractList(res, ['cartes'])))
             .catch(() => setGroupCards([]));
     }, [token, selectedCardsGroupId]);
 
@@ -138,10 +164,7 @@ export const AdministrationGroupes = () => {
             return;
         }
         listCartesAutorisees(token, selectedAgentGroupId)
-            .then((res) => {
-                const cards = Array.isArray(res.data) ? res.data : res.data?.cartes ?? [];
-                setAgentGroupCards(cards);
-            })
+            .then((res) => setAgentGroupCards(extractList(res, ['cartes'])))
             .catch(() => setAgentGroupCards([]));
     }, [token, selectedAgentGroupId]);
 
@@ -154,6 +177,7 @@ export const AdministrationGroupes = () => {
                 sendToastSuccess(t('administration.partnerCreated'));
                 setPartnerForm({ nom: '', contact: '', adresse: '', isActive: true });
                 fetchAccessControlData();
+                setActiveStep('groups');
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
             sendToastError(getApiErrorMessage(err, t('administration.genericError')));
@@ -178,6 +202,7 @@ export const AdministrationGroupes = () => {
                 }
                 setGroupForm({ nom: '', partenaireId: '', validFrom: '', validTo: '', isActive: true });
                 fetchAccessControlData();
+                setActiveStep('cards');
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
             sendToastError(getApiErrorMessage(err, t('administration.genericError')));
@@ -187,20 +212,33 @@ export const AdministrationGroupes = () => {
     /** Ajoute des cartes autorisées au groupe sélectionné. */
     const handleAddCards = async (e) => {
         e.preventDefault();
-        if (!selectedCardsGroupId) return;
-        const cartes = cardsInput.split('\n').map((x) => x.trim()).filter(Boolean);
-        if (cartes.length === 0) return;
+        if (!selectedCardsGroupId) {
+            sendToastError(t('administration.cardsGroupRequired'));
+            return;
+        }
+        const { valid: cartes, invalid } = parseAndValidateCardsInput(cardsInput);
+        if (cartes.length === 0 && invalid.length === 0) {
+            sendToastError(t('administration.cardsInputRequired'));
+            return;
+        }
+        if (invalid.length > 0) {
+            sendToastError(t('administration.cardsInvalidFormat', {
+                cards: invalid.slice(0, 3).join(', ') + (invalid.length > 3 ? '…' : '')
+            }));
+            return;
+        }
         try {
             const res = await addCartesAutorisees(token, selectedCardsGroupId, cartes);
             if (isApiSuccess(res)) {
-                sendToastSuccess(t('administration.cardsAdded'));
+                sendToastSuccess(t('administration.cardsAddedCount', { count: cartes.length }));
                 setCardsInput('');
                 const refresh = await listCartesAutorisees(token, selectedCardsGroupId);
-                const cards = Array.isArray(refresh.data) ? refresh.data : refresh.data?.cartes ?? [];
+                const cards = extractList(refresh, ['cartes']);
                 setGroupCards(cards);
                 if (selectedAgentGroupId && selectedAgentGroupId === selectedCardsGroupId) {
                     setAgentGroupCards(cards);
                 }
+                setActiveStep('agent');
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
             sendToastError(getApiErrorMessage(err, t('administration.genericError')));
@@ -247,6 +285,7 @@ export const AdministrationGroupes = () => {
                     interfaceLinks: ['/contrats-clients']
                 });
                 fetchAgents();
+                setMainTab('agents');
             } else sendToastError(res.message || t('administration.genericError'));
         } catch (err) {
             sendToastError(getApiErrorMessage(err, t('administration.genericError')));
@@ -370,7 +409,7 @@ export const AdministrationGroupes = () => {
                 sendToastSuccess(t('administration.cardDeleted'));
                 setCardToDelete(null);
                 const refresh = await listCartesAutorisees(token, selectedCardsGroupId);
-                const cards = Array.isArray(refresh.data) ? refresh.data : refresh.data?.cartes ?? [];
+                const cards = extractList(refresh, ['cartes']);
                 setGroupCards(cards);
                 if (selectedAgentGroupId && selectedAgentGroupId === selectedCardsGroupId) {
                     setAgentGroupCards(cards);
@@ -391,209 +430,253 @@ export const AdministrationGroupes = () => {
                 <div className="container-fluid">
                     <PageHeader title={t('administration.groupsSection')} />
 
-                    <div className="alert alert-info small mb-3 mb-md-4">
-                        <strong>{t('administration.stepsTitle')}</strong>
-                        <ol className="mb-0 mt-2 ps-3">
-                            <li>{t('administration.steps1')}</li>
-                            <li>{t('administration.steps2')}</li>
-                            <li>{t('administration.steps3')}</li>
-                            <li>{t('administration.steps4')}</li>
-                        </ol>
-                    </div>
+                    <ul className="nav nav-tabs mb-3 admin-groups-tab">
+                        <li className="nav-item">
+                            <button type="button" className={`nav-link ${mainTab === 'setup' ? 'active' : ''}`} onClick={() => setMainTab('setup')}>
+                                {t('administration.tabSetup')}
+                            </button>
+                        </li>
+                        <li className="nav-item">
+                            <button type="button" className={`nav-link ${mainTab === 'agents' ? 'active' : 'text-secondary'}`} onClick={() => setMainTab('agents')}>
+                                {t('administration.tabAgents')}
+                                {/* <span className={`badge rounded-pill ms-2 align-middle agents-tab-count ${mainTab === 'agents' ? 'is-active' : 'is-inactive'}`}>
+                                    {agents.length}
+                                </span> */}
+                            </button>
+                        </li>
+                    </ul>
 
+                    {mainTab === 'setup' && (
                     <div className="card">
                         <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                            <h5 className="card-title mb-0">{t('administration.groupsSection')}</h5>
-                            <button type="button" className="btn btn-outline-secondary btn-sm w-100 w-sm-auto" onClick={fetchAccessControlData}>
+                            <div>
+                                <h5 className="card-title mb-1">{t('administration.stepsTitle')}</h5>
+                                <p className="text-muted small mb-0">{t('administration.workflowHint')}</p>
+                            </div>
+                            <button type="button" className="btn btn-outline-secondary btn-sm flex-shrink-0" onClick={fetchAccessControlData}>
                                 {t('administration.refresh')}
                             </button>
                         </div>
                         <div className="card-body">
+                            <AdminGroupsStepNav
+                                steps={setupSteps}
+                                activeStep={activeStep}
+                                onChange={setActiveStep}
+                                ariaLabel={t('administration.stepNavAria')}
+                            />
                             {loading ? (
-                                <div className="text-center py-3"><Loader /></div>
+                                <LoaderContainer />
                             ) : (
-                                <div className="row g-3">
-                                    <div className="col-12 col-lg-4">
-                                        <div className="border rounded p-3 h-100">
-                                        <h6 className="mb-2">1. {t('administration.partners')}</h6>
-                                        <p className="text-muted small mb-2">{t('administration.partnersHelp')}</p>
-                                        <form onSubmit={handleCreatePartner}>
-                                            <input className="form-control mb-2" placeholder={t('administration.partnerName')} value={partnerForm.nom} onChange={(e) => setPartnerForm((p) => ({ ...p, nom: e.target.value }))} />
-                                            <input className="form-control mb-2" placeholder={t('administration.contact')} value={partnerForm.contact} onChange={(e) => setPartnerForm((p) => ({ ...p, contact: e.target.value }))} />
-                                            <input className="form-control mb-2" placeholder={t('administration.address')} value={partnerForm.adresse} onChange={(e) => setPartnerForm((p) => ({ ...p, adresse: e.target.value }))} />
-                                            <button className="btn btn-primary btn-sm w-100 w-sm-auto" type="submit">{t('administration.createPartner')}</button>
-                                        </form>
-                                        <div className="mt-2 border rounded p-2">
-                                            <div className="small text-muted mb-2">{partners.length} partenaire(s)</div>
-                                            <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
-                                                {partners.map((p) => (
-                                                    <div key={p.id} className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center border rounded p-2 mb-1 gap-2">
-                                                        <span className="small text-truncate" style={{ minWidth: 0 }}>{p.nom}</span>
-                                                        <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0 w-100 w-sm-auto" onClick={() => openPartnerModal(p)}>
-                                                            {t('administration.editPartner')}
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="col-12 col-lg-4">
-                                        <div className="border rounded p-3 h-100">
-                                        <h6 className="mb-2">2. {t('administration.groups')}</h6>
-                                        <p className="text-muted small mb-2">{t('administration.groupsHelp')}</p>
-                                        <form onSubmit={handleCreateGroup}>
-                                            <input className="form-control mb-2" placeholder={t('administration.groupName')} value={groupForm.nom} onChange={(e) => setGroupForm((g) => ({ ...g, nom: e.target.value }))} />
-                                            <select className="form-select mb-2" value={groupForm.partenaireId} onChange={(e) => setGroupForm((g) => ({ ...g, partenaireId: e.target.value }))}>
-                                                <option value="">{t('administration.selectPartner')}</option>
-                                                {partners.map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
-                                            </select>
-                                            <label className="form-label small">{t('administration.validFrom')}</label>
-                                            <input type="datetime-local" className="form-control mb-2" value={groupForm.validFrom} onChange={(e) => setGroupForm((g) => ({ ...g, validFrom: e.target.value }))} />
-                                            <label className="form-label small">{t('administration.validTo')}</label>
-                                            <input type="datetime-local" className="form-control mb-2" value={groupForm.validTo} onChange={(e) => setGroupForm((g) => ({ ...g, validTo: e.target.value }))} />
-                                            <button className="btn btn-primary btn-sm w-100 w-sm-auto" type="submit">{t('administration.createGroup')}</button>
-                                        </form>
-                                        <div className="mt-2 border rounded p-2">
-                                            <div className="small text-muted mb-2">{groups.length} groupe(s)</div>
-                                            <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
-                                                {groups.map((g) => (
-                                                    <div key={g.id} className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center border rounded p-2 mb-1 gap-2">
-                                                        <span className="small text-truncate" style={{ minWidth: 0 }}>{g.nom}</span>
-                                                        <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0 w-100 w-sm-auto" onClick={() => openGroupModal(g)}>
-                                                            {t('administration.editGroup')}
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="col-12 col-lg-4">
-                                        <div className="border rounded p-3 h-100">
-                                        <h6 className="mb-2">3. {t('administration.cards')}</h6>
-                                        <p className="text-muted small mb-2">{t('administration.cardsHelp')}</p>
-                                        <div className="border rounded p-2 mb-2">
-                                            <label className="form-label small mb-1">{t('administration.cardsGroupPickerTitle')}</label>
-                                            <select className="form-select form-select-sm" value={selectedCardsGroupId} onChange={(e) => setSelectedCardsGroupId(e.target.value)}>
-                                                <option value="">{t('administration.selectGroup')}</option>
-                                                {groups.map((g) => <option key={g.id} value={g.id}>{g.nom}</option>)}
-                                            </select>
-                                            {!selectedCardsGroupId ? (
-                                                <small className="text-warning d-block mt-2">{t('administration.cardsGroupRequired')}</small>
-                                            ) : (
-                                                <small className="text-success d-block mt-2">{t('administration.cardsGroupSelected', { group: selectedCardsGroup?.nom || '-' })}</small>
-                                            )}
-                                        </div>
-                                        <form onSubmit={handleAddCards}>
-                                            <textarea className="form-control mb-2" rows={5} placeholder={t('administration.cardsOnePerLine')} value={cardsInput} onChange={(e) => setCardsInput(e.target.value)} />
-                                            <button className="btn btn-primary btn-sm w-100 w-sm-auto" type="submit" disabled={!selectedCardsGroupId}>{t('administration.addCards')}</button>
-                                        </form>
-                                        <p className="text-muted small mb-1 mt-2">{t('administration.cardsGroupCurrentList')}</p>
-                                        <div className="small text-muted mb-2">{groupCards.length} carte(s)</div>
-                                        <div className="border rounded p-2" style={{ maxHeight: 220, overflowY: 'auto' }}>
-                                            {groupCards.length === 0 ? (
-                                                <div className="small text-muted">{t('administration.noCards')}</div>
-                                            ) : (
-                                                <div className="d-flex flex-column gap-2">
-                                                    {groupCards.map((c, idx) => {
-                                                        const cardValue = c?.numeroCarte || c?.cardNumber || c;
-                                                        return (
-                                                            <div key={c.id || `${cardValue}-${idx}`} className="border rounded p-2 d-flex justify-content-between align-items-center gap-2">
-                                                                <span className="small text-break" style={{ minWidth: 0 }}>{cardValue}</span>
-                                                                <button
-                                                                    type="button"
-                                                                    className="btn btn-sm btn-outline-danger p-1 flex-shrink-0"
-                                                                    onClick={() => setCardToDelete(String(cardValue))}
-                                                                    aria-label={t('administration.delete')}
-                                                                    title={t('administration.delete')}
-                                                                >
-                                                                    <i className="iconoir-trash" />
-                                                                </button>
-                                                            </div>
-                                                        );
-                                                    })}
+                                <>
+                                    {activeStep === 'partners' && (
+                                        <div className="mx-auto" style={{ maxWidth: 640 }}>
+                                            <h6 className="mb-2">{t('administration.partners')}</h6>
+                                            <p className="text-muted small mb-3">{t('administration.partnersHelp')}</p>
+                                            <form onSubmit={handleCreatePartner}>
+                                                <div className="mb-2">
+                                                    <label className="form-label small">{t('administration.partnerName')}</label>
+                                                    <input className="form-control" value={partnerForm.nom} onChange={(e) => setPartnerForm((p) => ({ ...p, nom: e.target.value }))} />
                                                 </div>
-                                            )}
-                                        </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="col-12">
-                                        <div className="border rounded p-3">
-                                        <h6 className="mb-2">4. {t('administration.createAgent')}</h6>
-                                        <p className="text-muted small mb-2">{t('administration.agentHelp')}</p>
-                                        <div className="border rounded p-2 mb-2">
-                                            <label className="form-label small mb-1">{t('administration.agentGroupPickerTitle')}</label>
-                                            <select className="form-select form-select-sm" value={selectedAgentGroupId} onChange={(e) => setSelectedAgentGroupId(e.target.value)}>
-                                                <option value="">{t('administration.selectGroup')}</option>
-                                                {groups.map((g) => <option key={g.id} value={g.id}>{g.nom}</option>)}
-                                            </select>
-                                            {!selectedAgentGroupId ? (
-                                                <small className="text-warning d-block mt-2">{t('administration.agentGroupRequired')}</small>
-                                            ) : (
-                                                <small className="text-success d-block mt-2">{t('administration.selectedGroupBadge', { group: selectedAgentGroup?.nom || '-' })}</small>
-                                            )}
-                                        </div>
-                                        <form onSubmit={handleCreateAgent} className="row g-2">
-                                            <div className="col-md-2"><input className="form-control" placeholder={t('administration.login')} value={agentForm.login} onChange={(e) => setAgentForm((a) => ({ ...a, login: e.target.value }))} /></div>
-                                            <div className="col-md-2"><input className="form-control" type="password" placeholder={t('administration.password')} value={agentForm.password} onChange={(e) => setAgentForm((a) => ({ ...a, password: e.target.value }))} /></div>
-                                            <div className="col-md-2"><input className="form-control" placeholder={t('administration.lastName')} value={agentForm.nom} onChange={(e) => setAgentForm((a) => ({ ...a, nom: e.target.value }))} /></div>
-                                            <div className="col-md-2"><input className="form-control" placeholder={t('administration.firstName')} value={agentForm.prenom} onChange={(e) => setAgentForm((a) => ({ ...a, prenom: e.target.value }))} /></div>
-                                            <div className="col-md-4"><input className="form-control" placeholder={t('administration.email')} value={agentForm.email} onChange={(e) => setAgentForm((a) => ({ ...a, email: e.target.value }))} /></div>
-                                            <div className="col-md-3">
-                                                <label className="form-label mb-1 small">{t('administration.validFrom')}</label>
-                                                <input type="datetime-local" className="form-control" value={agentForm.userValidFrom} onChange={(e) => setAgentForm((a) => ({ ...a, userValidFrom: e.target.value }))} />
-                                            </div>
-                                            <div className="col-md-3">
-                                                <label className="form-label mb-1 small">{t('administration.validTo')}</label>
-                                                <input type="datetime-local" className="form-control" value={agentForm.userValidTo} onChange={(e) => setAgentForm((a) => ({ ...a, userValidTo: e.target.value }))} />
-                                            </div>
-                                            <div className="col-12">
-                                                <label className="form-label mb-1">{t('administration.authorizedPages')}</label>
-                                                <p className="text-muted small mb-2">{t('administration.pagesHint')}</p>
-                                                <div className="border rounded p-3 mb-3">
-                                                    <div className="d-flex flex-wrap gap-3">
-                                                    {INTERFACE_LINK_OPTIONS.map((item) => (
-                                                        <label key={item.path} className="form-check-label d-flex align-items-center gap-2">
-                                                            <input
-                                                                type="checkbox"
-                                                                className="form-check-input"
-                                                                checked={agentForm.interfaceLinks.includes(item.path)}
-                                                                onChange={() => toggleAgentInterfaceLink(item.path)}
-                                                            />
-                                                            <span>{t(item.labelKey)}</span>
-                                                        </label>
+                                                <div className="mb-2">
+                                                    <label className="form-label small">{t('administration.contact')}</label>
+                                                    <input className="form-control" value={partnerForm.contact} onChange={(e) => setPartnerForm((p) => ({ ...p, contact: e.target.value }))} />
+                                                </div>
+                                                <div className="mb-3">
+                                                    <label className="form-label small">{t('administration.address')}</label>
+                                                    <input className="form-control" value={partnerForm.adresse} onChange={(e) => setPartnerForm((p) => ({ ...p, adresse: e.target.value }))} />
+                                                </div>
+                                                <button className="btn btn-primary w-100 w-sm-auto" type="submit">{t('administration.createPartner')}</button>
+                                            </form>
+                                            <CollapsiblePanel title={t('administration.partnersListTitle', { count: partners.length })}>
+                                                <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                                                    {partners.length === 0 ? (
+                                                        <p className="text-muted small mb-0">{t('administration.noPartners')}</p>
+                                                    ) : partners.map((p) => (
+                                                        <div key={p.id} className="d-flex align-items-center gap-2 border rounded p-2 mb-2">
+                                                            <span className="flex-grow-1 text-truncate" style={{ minWidth: 0 }} title={p.nom}>{p.nom}</span>
+                                                            <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0" onClick={() => openPartnerModal(p)} title={t('administration.editPartner')}>
+                                                                {t('administration.edit')}
+                                                            </button>
+                                                        </div>
                                                     ))}
-                                                    </div>
-                                                    <small className="text-muted d-block mt-2">{t('administration.agentDefaultLinks')}</small>
                                                 </div>
-                                            </div>
-                                            <div className="col-12 col-md-3 mt-2">
-                                                <button className="btn btn-primary w-100" type="submit" disabled={!selectedAgentGroupId}>{t('administration.createAgent')}</button>
-                                            </div>
-                                        </form>
+                                            </CollapsiblePanel>
                                         </div>
-                                    </div>
-                                </div>
+                                    )}
+
+                                    {activeStep === 'groups' && (
+                                        <div className="mx-auto" style={{ maxWidth: 640 }}>
+                                            <h6 className="mb-2">{t('administration.groups')}</h6>
+                                            <p className="text-muted small mb-3">{t('administration.groupsHelp')}</p>
+                                            <form onSubmit={handleCreateGroup}>
+                                                <div className="mb-2">
+                                                    <label className="form-label small">{t('administration.groupName')}</label>
+                                                    <input className="form-control" value={groupForm.nom} onChange={(e) => setGroupForm((g) => ({ ...g, nom: e.target.value }))} />
+                                                </div>
+                                                <div className="mb-2">
+                                                    <label className="form-label small">{t('administration.selectPartner')}</label>
+                                                    <select className="form-select" value={groupForm.partenaireId} onChange={(e) => setGroupForm((g) => ({ ...g, partenaireId: e.target.value }))}>
+                                                        <option value="">{t('administration.selectPartner')}</option>
+                                                        {partners.map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="row g-2 mb-3">
+                                                    <div className="col-12 col-md-6">
+                                                        <label className="form-label small">{t('administration.validFrom')}</label>
+                                                        <input type="datetime-local" className="form-control" value={groupForm.validFrom} onChange={(e) => setGroupForm((g) => ({ ...g, validFrom: e.target.value }))} />
+                                                    </div>
+                                                    <div className="col-12 col-md-6">
+                                                        <label className="form-label small">{t('administration.validTo')}</label>
+                                                        <input type="datetime-local" className="form-control" value={groupForm.validTo} onChange={(e) => setGroupForm((g) => ({ ...g, validTo: e.target.value }))} />
+                                                    </div>
+                                                </div>
+                                                <button className="btn btn-primary w-100 w-sm-auto" type="submit">{t('administration.createGroup')}</button>
+                                            </form>
+                                            <CollapsiblePanel title={t('administration.groupsListTitle', { count: groups.length })}>
+                                                <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                                                    {groups.length === 0 ? (
+                                                        <p className="text-muted small mb-0">{t('administration.noGroups')}</p>
+                                                    ) : groups.map((g) => (
+                                                        <div key={g.id} className="d-flex align-items-center gap-2 border rounded p-2 mb-2">
+                                                            <span className="flex-grow-1 text-truncate" style={{ minWidth: 0 }} title={g.nom}>{g.nom}</span>
+                                                            <button type="button" className="btn btn-outline-primary btn-sm flex-shrink-0" onClick={() => openGroupModal(g)} title={t('administration.editGroup')}>
+                                                                {t('administration.edit')}
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </CollapsiblePanel>
+                                        </div>
+                                    )}
+
+                                    {activeStep === 'cards' && (
+                                        <div className="mx-auto" style={{ maxWidth: 640 }}>
+                                            <h6 className="mb-2">{t('administration.cards')}</h6>
+                                            <p className="text-muted small mb-3">{t('administration.cardsHelp')}</p>
+                                            <div className="mb-3">
+                                                <label className="form-label small">{t('administration.cardsGroupPickerTitle')}</label>
+                                                <select className="form-select" value={selectedCardsGroupId} onChange={(e) => setSelectedCardsGroupId(e.target.value)}>
+                                                    <option value="">{t('administration.selectGroup')}</option>
+                                                    {groups.map((g) => <option key={g.id} value={g.id}>{g.nom}</option>)}
+                                                </select>
+                                                {!selectedCardsGroupId ? (
+                                                    <small className="text-warning d-block mt-2">{t('administration.cardsGroupRequired')}</small>
+                                                ) : (
+                                                    <small className="text-success d-block mt-2">{t('administration.cardsGroupSelected', { group: selectedCardsGroup?.nom || '-' })}</small>
+                                                )}
+                                            </div>
+                                            <form onSubmit={handleAddCards}>
+                                                <label className="form-label small">{t('administration.cardsOnePerLine')}</label>
+                                                <textarea className="form-control mb-3" rows={6} placeholder={t('administration.cardsOnePerLine')} value={cardsInput} onChange={(e) => setCardsInput(e.target.value)} disabled={!selectedCardsGroupId} />
+                                                <button className="btn btn-primary w-100 w-sm-auto" type="submit" disabled={!selectedCardsGroupId}>{t('administration.addCards')}</button>
+                                            </form>
+                                            <CollapsiblePanel title={t('administration.cardsListTitle', { count: groupCards.length })} defaultOpen={groupCards.length > 0}>
+                                                <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                                                    {groupCards.length === 0 ? (
+                                                        <p className="text-muted small mb-0">{t('administration.noCards')}</p>
+                                                    ) : (
+                                                        <div className="d-flex flex-column gap-2">
+                                                            {groupCards.map((c, idx) => {
+                                                                const cardValue = c?.numeroCarte || c?.cardNumber || c;
+                                                                return (
+                                                                    <div key={c.id || `${cardValue}-${idx}`} className="border rounded p-2 d-flex justify-content-between align-items-center gap-2">
+                                                                        <span className="small text-break" style={{ minWidth: 0 }}>{cardValue}</span>
+                                                                        <button type="button" className="btn btn-sm btn-outline-danger p-1 flex-shrink-0" onClick={() => setCardToDelete(String(cardValue))} aria-label={t('administration.delete')} title={t('administration.delete')}>
+                                                                            <i className="iconoir-trash" />
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </CollapsiblePanel>
+                                        </div>
+                                    )}
+
+                                    {activeStep === 'agent' && (
+                                        <div className="mx-auto" style={{ maxWidth: 760 }}>
+                                            <h6 className="mb-2">{t('administration.createAgent')}</h6>
+                                            <p className="text-muted small mb-3">{t('administration.agentHelp')}</p>
+                                            <div className="mb-3">
+                                                <label className="form-label small">{t('administration.agentGroupPickerTitle')}</label>
+                                                <select className="form-select" value={selectedAgentGroupId} onChange={(e) => setSelectedAgentGroupId(e.target.value)}>
+                                                    <option value="">{t('administration.selectGroup')}</option>
+                                                    {groups.map((g) => <option key={g.id} value={g.id}>{g.nom}</option>)}
+                                                </select>
+                                                {!selectedAgentGroupId ? (
+                                                    <small className="text-warning d-block mt-2">{t('administration.agentGroupRequired')}</small>
+                                                ) : (
+                                                    <small className="text-success d-block mt-2">{t('administration.selectedGroupBadge', { group: selectedAgentGroup?.nom || '-' })}</small>
+                                                )}
+                                            </div>
+                                            <form onSubmit={handleCreateAgent} className="row g-3">
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small">{t('administration.login')}</label>
+                                                    <input className="form-control" value={agentForm.login} onChange={(e) => setAgentForm((a) => ({ ...a, login: e.target.value }))} />
+                                                </div>
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small">{t('administration.password')}</label>
+                                                    <input className="form-control" type="password" value={agentForm.password} onChange={(e) => setAgentForm((a) => ({ ...a, password: e.target.value }))} />
+                                                </div>
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small">{t('administration.lastName')}</label>
+                                                    <input className="form-control" value={agentForm.nom} onChange={(e) => setAgentForm((a) => ({ ...a, nom: e.target.value }))} />
+                                                </div>
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small">{t('administration.firstName')}</label>
+                                                    <input className="form-control" value={agentForm.prenom} onChange={(e) => setAgentForm((a) => ({ ...a, prenom: e.target.value }))} />
+                                                </div>
+                                                <div className="col-12">
+                                                    <label className="form-label small">{t('administration.email')}</label>
+                                                    <input className="form-control" type="email" value={agentForm.email} onChange={(e) => setAgentForm((a) => ({ ...a, email: e.target.value }))} />
+                                                </div>
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small">{t('administration.validFrom')}</label>
+                                                    <input type="datetime-local" className="form-control" value={agentForm.userValidFrom} onChange={(e) => setAgentForm((a) => ({ ...a, userValidFrom: e.target.value }))} />
+                                                </div>
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small">{t('administration.validTo')}</label>
+                                                    <input type="datetime-local" className="form-control" value={agentForm.userValidTo} onChange={(e) => setAgentForm((a) => ({ ...a, userValidTo: e.target.value }))} />
+                                                </div>
+                                                <div className="col-12">
+                                                    <label className="form-label">{t('administration.authorizedPages')}</label>
+                                                    <p className="text-muted small mb-2">{t('administration.pagesHint')}</p>
+                                                    <div className="border rounded p-3">
+                                                        <div className="d-flex flex-column flex-sm-row flex-wrap gap-2 gap-sm-3">
+                                                            {INTERFACE_LINK_OPTIONS.map((item) => (
+                                                                <label key={item.path} className="form-check-label d-flex align-items-center gap-2">
+                                                                    <input type="checkbox" className="form-check-input" checked={agentForm.interfaceLinks.includes(item.path)} onChange={() => toggleAgentInterfaceLink(item.path)} />
+                                                                    <span>{t(item.labelKey)}</span>
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        <small className="text-muted d-block mt-2">{t('administration.agentDefaultLinks')}</small>
+                                                    </div>
+                                                </div>
+                                                <div className="col-12">
+                                                    <button className="btn btn-primary w-100 w-md-auto px-4" type="submit" disabled={!selectedAgentGroupId}>{t('administration.createAgent')}</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
+                    )}
 
-                    <div className="card mt-3">
+                    {mainTab === 'agents' && (
+                    <div className="card">
                         <div className="card-header">
                             <h5 className="card-title mb-0">{t('administration.agentsList')}</h5>
                         </div>
                         <div className="card-body">
                             {loadingAgents ? (
-                                <div className="text-center py-3"><Loader /></div>
-                            ) : agents.length === 0 ? (
-                                <p className="text-muted mb-0">{t('administration.noAgents')}</p>
+                                <LoaderContainer />
                             ) : (
                                 <>
-                                    <div className="d-none d-md-block table-responsive">
+                                    <div className="table-responsive">
                                         <table className="table table-hover mb-0">
                                             <thead>
                                                 <tr>
@@ -603,47 +686,70 @@ export const AdministrationGroupes = () => {
                                                     <th>{t('administration.groupName')}</th>
                                                     <th>{t('administration.validFrom')}</th>
                                                     <th>{t('administration.validTo')}</th>
-                                                    <th>{t('administration.actions')}</th>
+                                                    <th width="100">{t('administration.actions')}</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {agents.map((a) => (
-                                                    <tr key={a.id}>
-                                                        <td>{a.login}</td>
-                                                        <td>{a.nom}</td>
-                                                        <td>{a.prenom}</td>
-                                                        <td>{a.groupeAdmin?.nom || a.groupeNom || '-'}</td>
-                                                        <td>{a.userValidFrom ? new Date(a.userValidFrom).toLocaleString() : '-'}</td>
-                                                        <td>{a.userValidTo ? new Date(a.userValidTo).toLocaleString() : '-'}</td>
-                                                        <td>
-                                                            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openAgentDatesModal(a)}>
-                                                                {t('administration.editDates')}
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                {agents.length === 0 ? (
+                                                    <tr><td colSpan="7" className="text-center text-muted">{t('administration.noAgents')}</td></tr>
+                                                ) : (
+                                                    paginatedAgents.map((a) => (
+                                                        <tr key={a.id}>
+                                                            <td>{a.login}</td>
+                                                            <td>{a.nom}</td>
+                                                            <td>{a.prenom}</td>
+                                                            <td>{a.groupeAdmin?.nom || a.groupeNom || '-'}</td>
+                                                            <td>{a.userValidFrom ? new Date(a.userValidFrom).toLocaleString() : '-'}</td>
+                                                            <td>{a.userValidTo ? new Date(a.userValidTo).toLocaleString() : '-'}</td>
+                                                            <td>
+                                                                <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openAgentDatesModal(a)}>
+                                                                    {t('administration.editDates')}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
-
-                                    <div className="d-md-none">
-                                        {agents.map((a) => (
-                                            <div key={a.id} className="border rounded p-3 mb-2">
-                                                <div className="fw-semibold">{a.login}</div>
-                                                <div className="small text-muted">{a.prenom} {a.nom}</div>
-                                                <div className="small">{t('administration.groupName')}: {a.groupeAdmin?.nom || a.groupeNom || '-'}</div>
-                                                <div className="small">{t('administration.validFrom')}: {a.userValidFrom ? new Date(a.userValidFrom).toLocaleString() : '-'}</div>
-                                                <div className="small mb-2">{t('administration.validTo')}: {a.userValidTo ? new Date(a.userValidTo).toLocaleString() : '-'}</div>
-                                                <button type="button" className="btn btn-sm btn-outline-primary w-100" onClick={() => openAgentDatesModal(a)}>
-                                                    {t('administration.editDates')}
-                                                </button>
-                                            </div>
-                                        ))}
+                                    <div className="table-footer d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top">
+                                        <div className="d-flex align-items-center gap-2">
+                                            <label className="form-label mb-0 text-nowrap">{t('administration.perPage')}</label>
+                                            <select className="form-select form-select-sm w-auto" value={agentsLimit} onChange={(e) => { setAgentsLimit(Number(e.target.value)); setAgentsPage(1); }}>
+                                                <option value={10}>10</option>
+                                                <option value={25}>25</option>
+                                                <option value={50}>50</option>
+                                                <option value={100}>100</option>
+                                            </select>
+                                            <span className="text-muted small">{t('administration.totalAgents', { count: agents.length })}</span>
+                                        </div>
+                                        <nav aria-label="Pagination du tableau">
+                                            <ul className="pagination pagination-sm mb-0">
+                                                <li className={`page-item ${agentsPage <= 1 ? 'disabled' : ''}`}>
+                                                    <button type="button" className="page-link" onClick={() => setAgentsPage((p) => Math.max(1, p - 1))} disabled={agentsPage <= 1}>{t('administration.previous')}</button>
+                                                </li>
+                                                {agentsTotalPages > 1 && Array.from({ length: agentsTotalPages }, (_, i) => i + 1)
+                                                    .filter((p) => p === 1 || p === agentsTotalPages || (p >= agentsPage - 2 && p <= agentsPage + 2))
+                                                    .map((p, i, arr) => (
+                                                        <React.Fragment key={p}>
+                                                            {i > 0 && arr[i - 1] !== p - 1 && <li className="page-item disabled"><span className="page-link">…</span></li>}
+                                                            <li className={`page-item ${p === agentsPage ? 'active' : ''}`}>
+                                                                <button type="button" className="page-link" onClick={() => setAgentsPage(p)}>{p}</button>
+                                                            </li>
+                                                        </React.Fragment>
+                                                    ))}
+                                                <li className={`page-item ${agentsPage >= agentsTotalPages ? 'disabled' : ''}`}>
+                                                    <button type="button" className="page-link" onClick={() => setAgentsPage((p) => Math.min(agentsTotalPages, p + 1))} disabled={agentsPage >= agentsTotalPages}>{t('administration.next')}</button>
+                                                </li>
+                                            </ul>
+                                            <span className="ms-2 text-muted small">{t('clients.page', { page: agentsPage, total: agentsTotalPages || 1 })}</span>
+                                        </nav>
                                     </div>
                                 </>
                             )}
                         </div>
                     </div>
+                    )}
                 </div>
                 <Footer />
             </div>

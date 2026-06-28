@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
-import { Loader } from '../../components/loader';
+import { Loader, LoaderContainer } from '../../components/loader';
 import { createClient, createClientsBulk } from '../../services/clients';
 import {
     TYPES_CONTRAT,
@@ -429,7 +429,7 @@ export const ContratsClients = () => {
                                             {errors.typeContrat && <div className="invalid-feedback">{errors.typeContrat}</div>}
                                         </div>
                                         <button type="submit" className="btn btn-primary me-2" disabled={loading}>
-                                            {loading ? <Loader /> : t('contractsClients.generateDownload')}
+                                            {loading ? <Loader size="sm" /> : t('contractsClients.generateDownload')}
                                         </button>
                                         {/* <button type="button" className="btn btn-outline-secondary btn-sm" onClick={handleListPdfFields} disabled={loadingFields || !formData.typeContrat} title="Voir les noms des champs du PDF (diagnostic)">
                                             {loadingFields ? '...' : 'Voir les champs du PDF'}

@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
-import { Loader } from '../../components/loader';
+import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
 import { AdminFormModal } from '../../components/admin-form-modal';
 import {
@@ -190,7 +190,7 @@ export const Administration = () => {
                                 </div>
                                 <div className="card-body">
                                     {loading ? (
-                                        <div className="text-center py-4"><Loader /></div>
+                                        <LoaderContainer />
                                     ) : (
                                         <div className="table-responsive">
                                             <table className="table table-hover mb-0">

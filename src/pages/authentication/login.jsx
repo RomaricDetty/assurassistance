@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router';
 import { signInSuccess } from '../../store/actions/authentication';
 import { loginAdministrateur } from '../../services/administrateurs';
-import { Loader } from '../../components/loader';
+import { LoaderContainer } from '../../components/loader';
 import { toast } from 'react-toastify';
 import LogoAssurAssistance from '../../assets/images/logo_assurassistance.png';
 import { sendToastError } from '../../helpers';
@@ -160,9 +160,7 @@ export const Login = () => {
                                                         <div className="d-grid mt-3">
                                                             {
                                                                 loading ?
-                                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                                                                        <Loader />
-                                                                    </div>
+                                                                    <LoaderContainer className="loader-container-compact" />
                                                                     :
                                                                     <button className="btn" style={{ backgroundColor: '#e4590f', borderColor: '#e4590f' }} type="submit">
                                                                         {t('login.submit')} <i className="fas fa-sign-in-alt ms-1" />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
-import { Loader } from '../../components/loader';
+import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
 import { listClients } from '../../services/clients';
 import { TYPES_CONTRAT } from '../../utils/pdfContrat';
@@ -84,7 +84,7 @@ export const Home = () => {
                     <PageHeader title={t('home.title')} />
 
                     {loading ? (
-                        <div className="text-center py-5"><Loader /></div>
+                        <LoaderContainer />
                     ) : (
                         <>
                             <div className="row mb-4">

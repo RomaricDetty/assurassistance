@@ -4,8 +4,10 @@
 export const extractList = (res, fallbackKeys = []) => {
     if (Array.isArray(res?.data)) return res.data;
     for (const key of fallbackKeys) {
-        const value = res?.data?.[key];
-        if (Array.isArray(value)) return value;
+        const nested = res?.data?.[key];
+        if (Array.isArray(nested)) return nested;
+        const root = res?.[key];
+        if (Array.isArray(root)) return root;
     }
     if (Array.isArray(res?.data?.data)) return res.data.data;
     return [];
@@ -16,6 +18,7 @@ export const extractList = (res, fallbackKeys = []) => {
  */
 export const isApiSuccess = (res) => {
     if (res?.success === false) return false;
+    if (res?.success === true) return true;
     if (res?.data != null) return true;
     return res?.message == null;
 };
