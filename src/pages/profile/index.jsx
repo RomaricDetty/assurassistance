@@ -62,8 +62,7 @@ export const Profile = () => {
             const payload = {
                 nom: form.nom,
                 prenom: form.prenom,
-                email: form.email,
-                login: form.login
+                email: form.email
             };
             if (form.password?.trim()) payload.password = form.password.trim();
 
@@ -124,7 +123,7 @@ export const Profile = () => {
                                     <form onSubmit={handleSave}>
                                         <div className="mb-3">
                                             <label className="form-label">{t('administration.login')}</label>
-                                            <input type="text" className="form-control" name="login" value={form.login} onChange={handleChange} disabled={!editing} />
+                                            <input type="text" className="form-control" name="login" value={form.login} readOnly disabled />
                                         </div>
                                         <div className="mb-3">
                                             <label className="form-label">{t('profile.lastName')}</label>

@@ -5,30 +5,20 @@ import { Footer } from '../../components/footer';
 import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
 import { listClients, updateClient, deleteClient } from '../../services/clients';
-import { TYPES_CONTRAT, getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob } from '../../utils/pdfContrat';
+import { getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob, buildPdfTemplateCache, getTemplateFromCache } from '../../utils/pdfContrat';
+import {
+    getClientTypeContratId,
+    getTypeContratLabel,
+    toPdfData
+} from '../../utils/typeContrat';
+import { useTypesContrat } from '../../hooks/useTypesContrat';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import JSZip from 'jszip';
 import { useI18n } from '../../i18n';
 import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 
-/** Ordre métier pour le tri par type de contrat. */
-const CONTRACT_TYPE_ORDER = { Business: 1, Premier: 2, Platinum: 3 };
-
-/** Normalise le type de contrat (Business, Premier, Platinum). */
-const normalizeTypeContrat = (raw) => {
-    const value = String(raw ?? '').trim().toLowerCase();
-    if (value === 'premier') return 'Premier';
-    if (value === 'platinum') return 'Platinum';
-    return 'Business';
-};
-
 /** Mappe un client API vers les données attendues par fillPdfContrat. */
-const clientToPdfData = (c) => ({
-    prenom: c.prenomClient ?? '',
-    nom: c.nomClient ?? '',
-    idCarte: c.idCarteBancaire ?? '',
-    typeContrat: normalizeTypeContrat(c.typeContrat)
-});
+const clientToPdfData = (c, types = []) => toPdfData(c, types);
 
 const DEFAULT_LIMIT = 100;
 
@@ -38,11 +28,14 @@ const DEFAULT_LIMIT = 100;
 export const Clients = () => {
     const { t } = useI18n();
     const token = useSelector((s) => s.auth.token);
+    const role = useSelector((s) => s.auth.role);
+    const administrateur = useSelector((s) => s.auth.administrateur);
+    const { types, selectOptions } = useTypesContrat({ token, role, administrateur });
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [form, setForm] = useState({ nomClient: '', prenomClient: '', idCarteBancaire: '', typeContrat: 'Business' });
+    const [form, setForm] = useState({ nomClient: '', prenomClient: '', idCarteBancaire: '', typeContratId: '' });
     const [saving, setSaving] = useState(false);
     const [generatingId, setGeneratingId] = useState(null);
     const [generatingAll, setGeneratingAll] = useState(false);
@@ -62,7 +55,7 @@ export const Clients = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [contractTypeSort, setContractTypeSort] = useState(null);
 
-    const TYPES = [{ value: 'Business', label: 'Business' }, { value: 'Premier', label: 'Premier' }, { value: 'Platinum', label: 'Platinum' }];
+    const TYPES = selectOptions;
 
     /** Bascule le tri par type de contrat : aucun → asc → desc → asc… */
     const toggleContractTypeSort = () => {
@@ -87,7 +80,7 @@ export const Clients = () => {
             (c.prenomClient ?? '').toLowerCase().includes(t) ||
             (c.nomClient ?? '').toLowerCase().includes(t) ||
             (c.idCarteBancaire ?? '').toLowerCase().includes(t) ||
-            (c.typeContrat ?? '').toLowerCase().includes(t)
+            (getTypeContratLabel(c) ?? '').toLowerCase().includes(t)
         );
     }, [clients, searchTerm]);
 
@@ -95,11 +88,20 @@ export const Clients = () => {
     const displayedClients = useMemo(() => {
         if (!contractTypeSort) return filteredClients;
         return [...filteredClients].sort((a, b) => {
-            const orderA = CONTRACT_TYPE_ORDER[normalizeTypeContrat(a.typeContrat)] ?? 99;
-            const orderB = CONTRACT_TYPE_ORDER[normalizeTypeContrat(b.typeContrat)] ?? 99;
-            return contractTypeSort === 'asc' ? orderA - orderB : orderB - orderA;
+            const typeA = types.find((t) => t.id === getClientTypeContratId(a));
+            const typeB = types.find((t) => t.id === getClientTypeContratId(b));
+            const orderA = typeA?.ordre ?? 99;
+            const orderB = typeB?.ordre ?? 99;
+            const labelA = getTypeContratLabel(a);
+            const labelB = getTypeContratLabel(b);
+            if (orderA !== orderB) {
+                return contractTypeSort === 'asc' ? orderA - orderB : orderB - orderA;
+            }
+            return contractTypeSort === 'asc'
+                ? labelA.localeCompare(labelB)
+                : labelB.localeCompare(labelA);
         });
-    }, [filteredClients, contractTypeSort]);
+    }, [filteredClients, contractTypeSort, types]);
 
     const fetchList = useCallback(async (pageNum = page, limitNum = limit) => {
         if (!token) return;
@@ -176,7 +178,7 @@ export const Clients = () => {
             nomClient: client.nomClient ?? '',
             prenomClient: client.prenomClient ?? '',
             idCarteBancaire: client.idCarteBancaire ?? '',
-            typeContrat: client.typeContrat ?? 'Business'
+            typeContratId: getClientTypeContratId(client) || selectOptions[0]?.value || ''
         });
         setShowModal(true);
     };
@@ -191,7 +193,12 @@ export const Clients = () => {
         if (!editingId) return;
         setSaving(true);
         try {
-            const res = await updateClient(token, editingId, form);
+            const res = await updateClient(token, editingId, {
+                nomClient: form.nomClient,
+                prenomClient: form.prenomClient,
+                idCarteBancaire: form.idCarteBancaire,
+                typeContratId: form.typeContratId
+            });
             if (isApiSuccess(res)) {
                 sendToastSuccess(t('clients.updateSuccess'));
                 closeModal();
@@ -210,11 +217,11 @@ export const Clients = () => {
     const handleGenerateOne = async (client) => {
         setGeneratingId(client.id);
         try {
-            const url = getTemplateUrl(normalizeTypeContrat(client.typeContrat));
+            const url = getTemplateUrl(client.typeContrat || client, types);
             const res = await fetch(url);
             if (!res.ok) throw new Error(t('clients.templateNotFound'));
             const buffer = await res.arrayBuffer();
-            const data = clientToPdfData(client);
+            const data = clientToPdfData(client, types);
             const filled = await fillPdfContrat(buffer, data);
             const blob = new Blob([filled], { type: 'application/pdf' });
             downloadBlob(blob, getContratFileName(data));
@@ -244,13 +251,7 @@ export const Clients = () => {
         setGeneratingAll(true);
         setGenerateProgress({ current: 0, total });
         try {
-            const templateCache = new Map();
-            for (const t of TYPES_CONTRAT) {
-                try {
-                    const res = await fetch(getTemplateUrl(t.value));
-                    if (res.ok) templateCache.set(t.value, await res.arrayBuffer());
-                } catch { /* ignorer */ }
-            }
+            const templateCache = await buildPdfTemplateCache(types);
             const usedNames = new Set();
             const zipBlobs = [];
             let zip = new JSZip();
@@ -260,8 +261,8 @@ export const Clients = () => {
                 const batch = toGenerate.slice(start, end);
                 const results = await Promise.all(
                     batch.map(async (c) => {
-                        const pdfData = clientToPdfData(c);
-                        const templateBuf = templateCache.get(pdfData.typeContrat);
+                        const pdfData = clientToPdfData(c, types);
+                        const templateBuf = getTemplateFromCache(templateCache, pdfData);
                         if (!templateBuf) return null;
                         const bufferCopy = templateBuf.slice(0);
                         try {
@@ -346,25 +347,23 @@ export const Clients = () => {
                     <div className="row">
                         <div className="col-12">
                             <div className="card">
-                                <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div className="card-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
                                     <h5 className="card-title mb-0">{t('clients.list')}</h5>
-                                    <div className="d-flex align-items-center gap-2">
+                                    <div className="d-flex flex-wrap align-items-center justify-content-start justify-content-md-end gap-2">
                                         {selectedIds.length > 0 && (
                                             <button type="button" className="btn btn-danger btn-sm" onClick={() => setShowBulkDeleteModal(true)} title={t('clients.deleteSelection')}>
                                                 <i className="iconoir-trash" style={{ fontSize: '1.1rem' }} />
                                                 <span className="ms-1">{t('clients.deleteSelectionTitle', { count: selectedIds.length })}</span>
                                             </button>
                                         )}
-                                        <div className="d-flex align-items-center gap-2">
-                                            <button type="button" className="btn btn-success btn-sm" onClick={handleGenerateAll} disabled={generatingAll || displayedClients.length === 0} title={t('clients.generateVisibleZip')}>
+                                        <button type="button" className="btn btn-success btn-sm flex-shrink-0" onClick={handleGenerateAll} disabled={generatingAll || displayedClients.length === 0} title={t('clients.generateVisibleZip')}>
                                                 <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
                                                 {generatingAll ? (
                                                     <span className="ms-1">{generateProgress ? t('clients.generatingLabel', { current: generateProgress.current.toLocaleString('fr-FR'), total: generateProgress.total.toLocaleString('fr-FR') }) : t('clients.generatingShort')}</span>
                                                 ) : (
                                                     <span className="ms-1">{t('clients.generateZip')}</span>
                                                 )}
-                                            </button>
-                                        </div>
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="card-body">
@@ -427,7 +426,7 @@ export const Clients = () => {
                                                                 <td>{c.prenomClient}</td>
                                                                 <td>{c.nomClient}</td>
                                                                 <td>{c.idCarteBancaire}</td>
-                                                                <td>{c.typeContrat}</td>
+                                                                <td>{getTypeContratLabel(c)}</td>
                                                                 <td>
                                                                     <div className="d-flex align-items-center gap-1">
                                                                         <button type="button" className="btn btn-sm btn-outline-primary p-2" onClick={() => openEdit(c)} title={t('clients.edit')} aria-label={t('clients.edit')}>
@@ -518,8 +517,8 @@ export const Clients = () => {
                                     </div>
                                     <div className="mb-3">
                                         <label className="form-label">{t('clients.contractType')}</label>
-                                        <select className="form-select" value={form.typeContrat} onChange={(e) => setForm((p) => ({ ...p, typeContrat: e.target.value }))}>
-                                            {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                        <select className="form-select" value={form.typeContratId} onChange={(e) => setForm((p) => ({ ...p, typeContratId: e.target.value }))}>
+                                            {TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                                         </select>
                                     </div>
                                 </div>

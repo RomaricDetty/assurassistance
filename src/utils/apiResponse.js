@@ -27,5 +27,8 @@ export const isApiSuccess = (res) => {
  * Extrait un message d'erreur utilisable côté UI.
  */
 export const getApiErrorMessage = (error, fallbackMessage) => {
-    return error?.response?.data?.message || error?.message || fallbackMessage;
+    if (error?.body?.message) return error.body.message;
+    if (error?.response?.data?.message) return error.response.data.message;
+    if (error?.message) return error.message;
+    return fallbackMessage;
 };

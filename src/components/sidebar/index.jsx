@@ -5,19 +5,17 @@ import LogoMark from '../../assets/images/logo_mark.png';
 import './sidebar.css';
 import { useI18n } from '../../i18n';
 
+import { hasRouteAccess } from '../../utils/rbac';
+
 export const Sidebar = ({ isOpen }) => {
     const { t } = useI18n();
     const location = useLocation();
     const administrateur = useSelector((s) => s.auth.administrateur);
     const role = useSelector((s) => s.auth.role);
-    const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN';
     const links = administrateur?.interfaceLinks;
+
     /** Indique si un item de menu est autorisé pour l'utilisateur courant. */
-    const canAccess = (path) => {
-        if (isSuperAdmin) return true;
-        if (!Array.isArray(links) || links.length === 0) return true;
-        return links.includes(path);
-    };
+    const canAccess = (path) => hasRouteAccess(path, { role, interfaceLinks: links });
 
     // Fonction pour vérifier si le lien est actif
     const isActive = (path) => {
@@ -96,6 +94,16 @@ export const Sidebar = ({ isOpen }) => {
                                 >
                                     <i className="iconoir-group menu-icon"></i>
                                     <span className={isOpen ? '' : 'd-none'}>{t('menu.groupsAgents')}</span>
+                                </Link>
+                            </li>}
+                            {canAccess('/administration') && <li className="nav-item">
+                                <Link
+                                    className={`nav-link ${isActive('/administration/types-contrat') ? 'active' : ''}`}
+                                    to="/administration/types-contrat"
+                                    title={t('menu.contractTypes')}
+                                >
+                                    <i className="iconoir-page-star menu-icon"></i>
+                                    <span className={isOpen ? '' : 'd-none'}>{t('menu.contractTypes')}</span>
                                 </Link>
                             </li>}
                         </ul>

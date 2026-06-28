@@ -45,3 +45,35 @@ export const parseAndValidateCardsInput = (raw) => {
 
     return { valid, invalid };
 };
+
+/**
+ * Vérifie si un n° client correspond à un masque autorisé (X = joker).
+ */
+export const matchesAuthorizedCard = (clientCard, authorizedPattern) => {
+    const client = normalizeCardNumber(clientCard);
+    const pattern = normalizeCardNumber(authorizedPattern);
+    if (!client || !pattern) return false;
+    if (client.length !== pattern.length) return client === pattern;
+
+    for (let i = 0; i < pattern.length; i++) {
+        if (pattern[i] === 'X') continue;
+        if (pattern[i] !== client[i]) return false;
+    }
+    return true;
+};
+
+/**
+ * Indique si le n° carte client est couvert par au moins un masque autorisé.
+ */
+export const isClientCardAuthorized = (clientCard, authorizedPatterns = []) => (
+    authorizedPatterns.some((pattern) => matchesAuthorizedCard(clientCard, pattern))
+);
+
+/**
+ * Extrait les numéros/masques depuis une liste API de cartes autorisées.
+ */
+export const extractAuthorizedCardPatterns = (cartes = []) => (
+    cartes
+        .map((c) => normalizeCardNumber(c?.numeroCarte || c?.cardNumber || c))
+        .filter(Boolean)
+);

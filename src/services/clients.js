@@ -1,74 +1,26 @@
 import { CREATE_CLIENT_URL, BULK_CREATE_CLIENTS_URL, LIST_CLIENTS_URL, getClientUrl } from '../config/urls/clients';
-import { authHeaders } from './administrateurs';
+import { apiDelete, apiGet, apiPost, apiPut } from '../utils/apiClient';
 
-/**
- * Crée un client. Body: nomClient, prenomClient, idCarteBancaire, typeContrat (Business | Platinum | Premier).
- */
-export const createClient = async (token, payload) => {
-    const res = await fetch(CREATE_CLIENT_URL, {
-        method: 'POST',
-        headers: authHeaders(token),
-        body: JSON.stringify(payload)
-    });
-    return res.json();
-};
+/** Crée un client. */
+export const createClient = async (token, payload) => apiPost(CREATE_CLIENT_URL, token, payload);
 
-/**
- * Crée plusieurs clients en une requête. Body : array de { nomClient, prenomClient, idCarteBancaire, typeContrat }.
- * Réponse attendue : { data: { created: [...], duplicateCount?: number, errors?: [...] }, success }.
- */
-export const createClientsBulk = async (token, clientsArray) => {
-    const res = await fetch(BULK_CREATE_CLIENTS_URL, {
-        method: 'POST',
-        headers: authHeaders(token),
-        body: JSON.stringify(clientsArray)
-    });
-    return res.json();
-};
+/** Crée plusieurs clients en une requête. */
+export const createClientsBulk = async (token, clientsArray) => (
+    apiPost(BULK_CREATE_CLIENTS_URL, token, clientsArray)
+);
 
-/**
- * Liste les clients (paginé). params: { page, limit }. Réponse : data + meta (page, limit, total, totalPages).
- */
+/** Liste les clients (paginé). */
 export const listClients = async (token, params = {}) => {
     const qs = new URLSearchParams(params).toString();
     const url = qs ? `${LIST_CLIENTS_URL}?${qs}` : LIST_CLIENTS_URL;
-    const res = await fetch(url, {
-        method: 'GET',
-        headers: authHeaders(token)
-    });
-    return res.json();
+    return apiGet(url, token);
 };
 
-/**
- * Récupère un client par ID.
- */
-export const getClient = async (token, id) => {
-    const res = await fetch(getClientUrl(id), {
-        method: 'GET',
-        headers: authHeaders(token)
-    });
-    return res.json();
-};
+/** Récupère un client par ID. */
+export const getClient = async (token, id) => apiGet(getClientUrl(id), token);
 
-/**
- * Modifie un client. Champs optionnels: nomClient, prenomClient, idCarteBancaire, typeContrat.
- */
-export const updateClient = async (token, id, payload) => {
-    const res = await fetch(getClientUrl(id), {
-        method: 'PUT',
-        headers: authHeaders(token),
-        body: JSON.stringify(payload)
-    });
-    return res.json();
-};
+/** Modifie un client. */
+export const updateClient = async (token, id, payload) => apiPut(getClientUrl(id), token, payload);
 
-/**
- * Supprime un client.
- */
-export const deleteClient = async (token, id) => {
-    const res = await fetch(getClientUrl(id), {
-        method: 'DELETE',
-        headers: authHeaders(token)
-    });
-    return res.json();
-};
+/** Supprime un client. */
+export const deleteClient = async (token, id) => apiDelete(getClientUrl(id), token);

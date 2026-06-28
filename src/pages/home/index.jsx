@@ -5,14 +5,15 @@ import { Footer } from '../../components/footer';
 import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
 import { listClients } from '../../services/clients';
-import { TYPES_CONTRAT } from '../../utils/pdfContrat';
 import { sendToastError } from '../../helpers';
 import { useI18n } from '../../i18n';
+import { useTypesContrat } from '../../hooks/useTypesContrat';
+import { getClientTypeContratId, getTypeCardStyle } from '../../utils/typeContrat';
 
 /**
  * Récupère tous les clients page par page et retourne les effectifs par type de contrat.
  */
-const fetchCountsByType = async (token) => {
+const fetchCountsByType = async (token, types) => {
     const limit = 100;
     let page = 1;
     let totalPages = 1;
@@ -26,35 +27,16 @@ const fetchCountsByType = async (token) => {
         if (list.length < limit) break;
         page++;
     } while (page <= totalPages);
-    const counts = { Business: 0, Premier: 0, Platinum: 0 };
-    all.forEach((c) => {
-        const t = c.typeContrat || 'Business';
-        if (counts[t] !== undefined) counts[t]++;
-        else counts.Business++;
+
+    const counts = {};
+    types.forEach((type) => {
+        counts[type.id] = 0;
+    });
+    all.forEach((client) => {
+        const typeId = getClientTypeContratId(client);
+        if (typeId && counts[typeId] !== undefined) counts[typeId]++;
     });
     return counts;
-};
-
-/** Style et icône par type de contrat pour les cartes du tableau de bord */
-const TYPE_STYLE = {
-    Business: {
-        icon: 'iconoir-bag',
-        color: '#e4590f',
-        bgLight: 'rgba(228, 89, 15, 0.08)',
-        labelKey: 'home.contractBusiness'
-    },
-    Premier: {
-        icon: 'iconoir-star',
-        color: '#0da684',
-        bgLight: 'rgba(13, 166, 132, 0.08)',
-        labelKey: 'home.contractPremier'
-    },
-    Platinum: {
-        icon: 'iconoir-medal',
-        color: '#2c7be5',
-        bgLight: 'rgba(44, 123, 229, 0.08)',
-        labelKey: 'home.contractPlatinum'
-    }
 };
 
 /**
@@ -63,19 +45,27 @@ const TYPE_STYLE = {
 export const Home = () => {
     const { t } = useI18n();
     const token = useSelector((s) => s.auth.token);
-    const [countsByType, setCountsByType] = useState({ Business: 0, Premier: 0, Platinum: 0 });
+    const role = useSelector((s) => s.auth.role);
+    const administrateur = useSelector((s) => s.auth.administrateur);
+    const { types, loading: loadingTypes } = useTypesContrat({ token, role, administrateur });
+    const [countsByType, setCountsByType] = useState({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!token) return;
+        if (!token || loadingTypes) return;
+        if (types.length === 0) {
+            setCountsByType({});
+            setLoading(false);
+            return;
+        }
         setLoading(true);
-        fetchCountsByType(token)
+        fetchCountsByType(token, types)
             .then(setCountsByType)
             .catch(() => sendToastError(t('home.statsError')))
             .finally(() => setLoading(false));
-    }, [token, t]);
+    }, [token, t, types, loadingTypes]);
 
-    const total = (countsByType.Business ?? 0) + (countsByType.Premier ?? 0) + (countsByType.Platinum ?? 0);
+    const total = types.reduce((sum, type) => sum + (countsByType[type.id] ?? 0), 0);
 
     return (
         <Layout>
@@ -83,7 +73,7 @@ export const Home = () => {
                 <div className="container-fluid">
                     <PageHeader title={t('home.title')} />
 
-                    {loading ? (
+                    {loading || loadingTypes ? (
                         <LoaderContainer />
                     ) : (
                         <>
@@ -111,12 +101,12 @@ export const Home = () => {
 
                             <h5 className="mb-3 fw-semibold">{t('home.distribution')}</h5>
                             <div className="row g-3 g-md-4">
-                                {TYPES_CONTRAT.map(({ value }) => {
-                                    const style = TYPE_STYLE[value] || TYPE_STYLE.Business;
-                                    const count = countsByType[value] ?? 0;
+                                {types.map((type, index) => {
+                                    const style = getTypeCardStyle(index);
+                                    const count = countsByType[type.id] ?? 0;
                                     const percent = total > 0 ? Math.round((count / total) * 100) : 0;
                                     return (
-                                        <div key={value} className="col-12 col-sm-6 col-xl-4">
+                                        <div key={type.id} className="col-12 col-sm-6 col-xl-4">
                                             <div
                                                 className="card border-0 h-100 overflow-hidden position-relative"
                                                 style={{
@@ -148,13 +138,7 @@ export const Home = () => {
                                                         <h2 className="fw-bold mb-1 fs-2" style={{ color: style.color }}>
                                                             {count}
                                                         </h2>
-                                                        <p className="text-muted small mb-2">{t(style.labelKey)}</p>
-                                                        <div className="rounded-2 overflow-hidden" style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.06)' }}>
-                                                            <div
-                                                                className="h-100 rounded-2"
-                                                                style={{ width: `${percent}%`, backgroundColor: style.color, transition: 'width 0.5s ease' }}
-                                                            />
-                                                        </div>
+                                                        <p className="text-muted mb-0 small">{type.libelle || type.code}</p>
                                                     </div>
                                                 </div>
                                             </div>

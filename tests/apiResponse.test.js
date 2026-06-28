@@ -29,6 +29,8 @@ test('isApiSuccess handles success flags and payloads', () => {
  */
 test('getApiErrorMessage prioritizes backend then fallback', () => {
     const backendError = { response: { data: { message: 'Backend message' } } };
+    const apiError = { message: 'HTTP error', body: { message: 'API body message' } };
+    assert.equal(getApiErrorMessage(apiError, 'Fallback'), 'API body message');
     assert.equal(getApiErrorMessage(backendError, 'Fallback'), 'Backend message');
     assert.equal(getApiErrorMessage(new Error('Native error'), 'Fallback'), 'Native error');
     assert.equal(getApiErrorMessage(null, 'Fallback'), 'Fallback');

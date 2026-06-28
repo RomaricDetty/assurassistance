@@ -274,14 +274,27 @@ export const Administration = () => {
                     </div>
 
                     <div className="row mt-3">
-                        <div className="col-12">
-                            <div className="card border-0 shadow-sm">
+                        <div className="col-md-6">
+                            <div className="card border-0 shadow-sm h-100">
                                 <div className="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
                                     <div>
                                         <h5 className="mb-1">{t('administration.groupsSection')}</h5>
                                         <p className="text-muted mb-0 small">{t('administration.agentHelp')}</p>
                                     </div>
                                     <Link to="/administration/groupes-agents" className="btn btn-primary">
+                                        {t('administration.openDedicatedPage')}
+                                    </Link>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-6">
+                            <div className="card border-0 shadow-sm h-100">
+                                <div className="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                                    <div>
+                                        <h5 className="mb-1">{t('contractTypes.title')}</h5>
+                                        <p className="text-muted mb-0 small">{t('contractTypes.help')}</p>
+                                    </div>
+                                    <Link to="/administration/types-contrat" className="btn btn-primary">
                                         {t('administration.openDedicatedPage')}
                                     </Link>
                                 </div>

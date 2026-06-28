@@ -1,11 +1,7 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { getClientTypeCode } from './typeContrat';
 
-/** Types de contrat et noms des fichiers template dans public/contrats/ */
-export const TYPES_CONTRAT = [
-    { value: 'Business', label: 'Business' },
-    { value: 'Premier', label: 'Premier' },
-    { value: 'Platinum', label: 'Platinum' }
-];
+export { buildPdfTemplateCache, getTemplateFromCache, getTemplateUrl, resolvePdfUrl } from './typeContrat';
 
 /**
  * Mapping des champs vers les noms possibles dans les PDF (AcroForm).
@@ -15,14 +11,6 @@ const FIELD_MAPPING = {
     prenom: ['Prénoms', 'Prenoms', 'prenom', 'Prenom', 'Prénom', 'prenoms', 'firstname'],
     nom: ['Nom', 'nom', 'NOM', 'nom_client', 'NomClient', 'lastname', 'nom_titulaire'],
     idCarte: ['ID / N° Carte', 'ID Carte', 'N° Carte', 'idCarte', 'numero_carte', 'NumeroCarte', 'carte', 'card_number']
-};
-
-/**
- * Récupère l'URL du template PDF selon le type de contrat.
- */
-export const getTemplateUrl = (typeContrat) => {
-    const name = TYPES_CONTRAT.find(t => t.value === typeContrat)?.value || typeContrat;
-    return `${import.meta.env.BASE_URL || ''}contrats/${name}.pdf`;
 };
 
 /**
@@ -232,7 +220,7 @@ export async function fillPdfContrat(pdfBytes, data) {
 export function getContratFileName(data) {
     const nom = (data.nom || 'Client').replace(/\s+/g, '_');
     const prenom = (data.prenom || '').replace(/\s+/g, '_');
-    const type = data.typeContrat || 'Contrat';
+    const type = data.typeContrat || getClientTypeCode(data) || 'Contrat';
     return `${nom}_${prenom}_${type}.pdf`.replace(/_+/g, '_');
 }
 

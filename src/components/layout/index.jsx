@@ -4,23 +4,19 @@ import { Sidebar } from '../../components/sidebar';
 
 export const Layout = ({ children }) => {
 
-    // Initialiser sidebarOpen en fonction de la taille de l'écran
-    const [sidebarOpen, setSidebarOpen] = useState(() => {
-        return window.innerWidth > 768; // Ouvert sur desktop, fermé sur mobile
-    });
+    const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+    const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
 
     const toggleSidebar = () => {
         setSidebarOpen(!sidebarOpen);
     };
 
-    // Gérer le redimensionnement de l'écran
+    /** Adapte sidebar et mode mobile au redimensionnement. */
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth > 768) {
-                setSidebarOpen(true); // Ouvrir automatiquement sur desktop
-            } else {
-                setSidebarOpen(false); // Fermer automatiquement sur mobile
-            }
+            const mobile = window.innerWidth <= 768;
+            setIsMobile(mobile);
+            setSidebarOpen(!mobile);
         };
 
         window.addEventListener('resize', handleResize);
@@ -37,7 +33,7 @@ export const Layout = ({ children }) => {
             <Sidebar isOpen={sidebarOpen} />
             {/* end startbar */}
 
-            {sidebarOpen && window.innerWidth <= 768 && (
+            {sidebarOpen && isMobile && (
                 <div className="sidebar-overlay" onClick={toggleSidebar}></div>
             )}
 

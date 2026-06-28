@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {
     normalizeCardNumber,
     isValidCardNumber,
-    parseAndValidateCardsInput
+    parseAndValidateCardsInput,
+    matchesAuthorizedCard,
+    isClientCardAuthorized,
+    extractAuthorizedCardPatterns
 } from '../src/utils/carteAutorisee.js';
 
 /**
@@ -32,4 +35,18 @@ test('parseAndValidateCardsInput splits and validates entries', () => {
     const result = parseAndValidateCardsInput('433339XXXXXX3509\n1234567890123456\n123\n433339xxxxxx3509');
     assert.deepEqual(result.valid, ['433339XXXXXX3509', '1234567890123456']);
     assert.deepEqual(result.invalid, ['123']);
+});
+
+test('matchesAuthorizedCard supports X wildcard masks', () => {
+    assert.equal(matchesAuthorizedCard('4333391234563509', '433339XXXXXX3509'), true);
+    assert.equal(matchesAuthorizedCard('4333399999993509', '433339XXXXXX3509'), true);
+    assert.equal(matchesAuthorizedCard('4333391234569999', '433339XXXXXX3509'), false);
+});
+
+test('extractAuthorizedCardPatterns normalizes API cartes', () => {
+    const patterns = extractAuthorizedCardPatterns([
+        { numeroCarte: '433339xxxxxx3509' },
+        { cardNumber: '1234567890123456' }
+    ]);
+    assert.deepEqual(patterns, ['433339XXXXXX3509', '1234567890123456']);
 });

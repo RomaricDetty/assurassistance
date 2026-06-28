@@ -7,6 +7,7 @@ import { LoaderContainer } from '../../components/loader';
 import { toast } from 'react-toastify';
 import LogoAssurAssistance from '../../assets/images/logo_assurassistance.png';
 import { sendToastError } from '../../helpers';
+import { getDefaultRoute } from '../../utils/rbac';
 import { useI18n } from '../../i18n';
 
 export const Login = () => {
@@ -51,7 +52,7 @@ export const Login = () => {
     };
 
     const performLogin = (token, administrateur) => {
-        const role = administrateur?.role || 'SUPER_ADMIN';
+        const role = administrateur?.role ? String(administrateur.role).toUpperCase() : 'AGENT';
         dispatch(signInSuccess(token, role, role, administrateur));
         const prenom = administrateur?.prenom || '';
         toast.success(prenom ? t('login.welcomeBack', { prenom }) : t('login.success'), {
@@ -62,7 +63,7 @@ export const Login = () => {
             pauseOnHover: true,
             draggable: true
         });
-        navigate('/');
+        navigate(getDefaultRoute({ role, interfaceLinks: administrateur?.interfaceLinks }));
     };
 
     const handleSubmit = async (e) => {

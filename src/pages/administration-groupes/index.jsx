@@ -17,8 +17,11 @@ import {
     listCartesAutorisees,
     addCartesAutorisees,
     removeCartesAutorisees,
-    createAgentForGroupe
+    createAgentForGroupe,
+    getGroupTypesContrat,
+    setGroupTypesContrat
 } from '../../services/accessControl';
+import { listTypesContrat } from '../../services/typeContrat';
 import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
 import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
@@ -47,6 +50,10 @@ export const AdministrationGroupes = () => {
     const [groupCards, setGroupCards] = useState([]);
     const [agentGroupCards, setAgentGroupCards] = useState([]);
     const [cardsInput, setCardsInput] = useState('');
+    const [allTypesContrat, setAllTypesContrat] = useState([]);
+    const [groupTypeIds, setGroupTypeIds] = useState([]);
+    const [groupTypesAllAllowed, setGroupTypesAllAllowed] = useState(true);
+    const [savingGroupTypes, setSavingGroupTypes] = useState(false);
     const [activeStep, setActiveStep] = useState('partners');
     const [mainTab, setMainTab] = useState('setup');
     const [loading, setLoading] = useState(false);
@@ -127,6 +134,66 @@ export const AdministrationGroupes = () => {
     useEffect(() => {
         fetchAccessControlData();
     }, [fetchAccessControlData]);
+
+    /** Charge tous les types de contrat actifs. */
+    useEffect(() => {
+        if (!token) return;
+        listTypesContrat(token, { activeOnly: 'true' })
+            .then((res) => setAllTypesContrat(extractList(res)))
+            .catch(() => setAllTypesContrat([]));
+    }, [token]);
+
+    /** Charge les types autorisés pour le groupe sélectionné (cartes). */
+    useEffect(() => {
+        if (!token || !selectedCardsGroupId) {
+            setGroupTypeIds([]);
+            setGroupTypesAllAllowed(true);
+            return;
+        }
+        getGroupTypesContrat(token, selectedCardsGroupId)
+            .then((res) => {
+                const list = extractList(res);
+                const allAllowed = res?.meta?.allTypesAllowed !== false;
+                setGroupTypesAllAllowed(allAllowed);
+                setGroupTypeIds(allAllowed ? [] : list.map((t) => t.id));
+            })
+            .catch(() => {
+                setGroupTypeIds([]);
+                setGroupTypesAllAllowed(true);
+            });
+    }, [token, selectedCardsGroupId]);
+
+    /** Bascule la sélection d'un type de contrat pour le groupe. */
+    const toggleGroupTypeContrat = (typeId) => {
+        setGroupTypeIds((prev) => {
+            if (prev.length === 0) {
+                return allTypesContrat.map((t) => t.id).filter((id) => id !== typeId);
+            }
+            return prev.includes(typeId)
+                ? prev.filter((id) => id !== typeId)
+                : [...prev, typeId];
+        });
+        setGroupTypesAllAllowed(false);
+    };
+
+    /** Enregistre les types de contrat autorisés pour le groupe. */
+    const handleSaveGroupTypes = async () => {
+        if (!token || !selectedCardsGroupId) return;
+        setSavingGroupTypes(true);
+        try {
+            const res = await setGroupTypesContrat(token, selectedCardsGroupId, groupTypeIds);
+            if (isApiSuccess(res)) {
+                sendToastSuccess(t('administration.groupTypesSaved'));
+                setGroupTypesAllAllowed(res?.meta?.allTypesAllowed !== false);
+            } else {
+                sendToastError(res.message || t('administration.groupTypesSaveError'));
+            }
+        } catch (err) {
+            sendToastError(getApiErrorMessage(err, t('administration.groupTypesSaveError')));
+        } finally {
+            setSavingGroupTypes(false);
+        }
+    };
 
     /** Charge la liste des agents (admins avec role AGENT). */
     const fetchAgents = useCallback(async () => {
@@ -590,6 +657,50 @@ export const AdministrationGroupes = () => {
                                                         </div>
                                                     )}
                                                 </div>
+                                            </CollapsiblePanel>
+                                            <CollapsiblePanel title={t('administration.groupTypesTitle')} defaultOpen>
+                                                <p className="text-muted small mb-2">{t('administration.groupTypesHelp')}</p>
+                                                {!selectedCardsGroupId ? (
+                                                    <p className="text-muted small mb-0">{t('administration.cardsGroupRequired')}</p>
+                                                ) : allTypesContrat.length === 0 ? (
+                                                    <p className="text-muted small mb-0">{t('administration.noContractTypes')}</p>
+                                                ) : (
+                                                    <>
+                                                        {groupTypesAllAllowed && groupTypeIds.length === 0 && (
+                                                            <p className="text-success small mb-2">{t('administration.groupTypesAllAllowed')}</p>
+                                                        )}
+                                                        <div className="d-flex flex-column gap-2 mb-3">
+                                                            {allTypesContrat.map((type) => (
+                                                                <label key={type.id} className="form-check-label d-flex align-items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="form-check-input"
+                                                                        checked={groupTypeIds.length === 0 || groupTypeIds.includes(type.id)}
+                                                                        onChange={() => toggleGroupTypeContrat(type.id)}
+                                                                    />
+                                                                    <span>{type.libelle || type.code}</span>
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        <p className="text-muted small mb-2">{t('administration.groupTypesEmptyHint')}</p>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-outline-secondary btn-sm me-2"
+                                                            onClick={() => setGroupTypeIds([])}
+                                                            disabled={!selectedCardsGroupId}
+                                                        >
+                                                            {t('administration.groupTypesAllowAll')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-primary btn-sm"
+                                                            onClick={handleSaveGroupTypes}
+                                                            disabled={!selectedCardsGroupId || savingGroupTypes}
+                                                        >
+                                                            {savingGroupTypes ? t('clients.saving') : t('administration.saveGroupTypes')}
+                                                        </button>
+                                                    </>
+                                                )}
                                             </CollapsiblePanel>
                                         </div>
                                     )}

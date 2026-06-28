@@ -1,6 +1,9 @@
 import { Routes, Route, Navigate } from "react-router";
+import { lazy, Suspense } from 'react';
 import { useSelector } from 'react-redux';
 import { useTokenExpiration } from './hooks/useTokenExpiration';
+import { LoaderContainer } from './components/loader';
+import { hasRouteAccess, getDefaultRoute } from './utils/rbac';
 
 import "./assets/css/bootstrap.css";
 import "./assets/css/icons.css";
@@ -10,13 +13,14 @@ import "./assets/css/theme-primary.css";
 import "./assets/css/responsive.css";
 import 'react-toastify/dist/ReactToastify.css';
 
-import { Home } from './pages/home';
-import { Login } from './pages/authentication/login';
-import { Profile } from './pages/profile';
-import { ContratsClients } from './pages/contrats-clients';
-import { Clients } from './pages/clients';
-import { Administration } from './pages/administration';
-import { AdministrationGroupes } from './pages/administration-groupes';
+const Home = lazy(() => import('./pages/home').then((m) => ({ default: m.Home })));
+const Login = lazy(() => import('./pages/authentication/login').then((m) => ({ default: m.Login })));
+const Profile = lazy(() => import('./pages/profile').then((m) => ({ default: m.Profile })));
+const ContratsClients = lazy(() => import('./pages/contrats-clients').then((m) => ({ default: m.ContratsClients })));
+const Clients = lazy(() => import('./pages/clients').then((m) => ({ default: m.Clients })));
+const Administration = lazy(() => import('./pages/administration').then((m) => ({ default: m.Administration })));
+const AdministrationGroupes = lazy(() => import('./pages/administration-groupes').then((m) => ({ default: m.AdministrationGroupes })));
+const AdministrationTypesContrat = lazy(() => import('./pages/administration-types-contrat').then((m) => ({ default: m.AdministrationTypesContrat })));
 
 function App() {
 
@@ -25,16 +29,13 @@ function App() {
     const userRole = useSelector(state => state.auth.role);
     const interfaceLinks = administrateur?.interfaceLinks;
     useTokenExpiration();
-    const isSuperAdmin = String(userRole || '').toUpperCase() === 'SUPER_ADMIN';
-    const hasAccess = (path) => {
-        if (isSuperAdmin) return true;
-        if (!Array.isArray(interfaceLinks) || interfaceLinks.length === 0) return true;
-        return interfaceLinks.includes(path);
-    };
-    const fallbackRoute = hasAccess('/') ? '/' : hasAccess('/contrats-clients') ? '/contrats-clients' : hasAccess('/clients') ? '/clients' : '/profile';
+
+    const authContext = { role: userRole, interfaceLinks };
+    const hasAccess = (path) => hasRouteAccess(path, authContext);
+    const fallbackRoute = getDefaultRoute(authContext);
 
     return (
-        <>
+        <Suspense fallback={<LoaderContainer />}>
             {token ? (
                 <Routes>
                     {hasAccess('/') && <Route path="/" element={<Home />} />}
@@ -43,6 +44,7 @@ function App() {
                     {hasAccess('/clients') && <Route path="/clients" element={<Clients />} />}
                     {hasAccess('/administration') && <Route path="/administration" element={<Administration />} />}
                     {hasAccess('/administration') && <Route path="/administration/groupes-agents" element={<AdministrationGroupes />} />}
+                    {hasAccess('/administration') && <Route path="/administration/types-contrat" element={<AdministrationTypesContrat />} />}
                     <Route path="*" element={<Navigate to={fallbackRoute} replace />} />
                 </Routes>
             ) : (
@@ -51,8 +53,7 @@ function App() {
                     <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
             )}
-        </>
-
+        </Suspense>
     )
 }
 
