@@ -5,7 +5,7 @@ import { Footer } from '../../components/footer';
 import { LoaderContainer } from '../../components/loader';
 import { PageHeader } from '../../components/page-header';
 import { listClients, updateClient, deleteClient } from '../../services/clients';
-import { getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob, buildPdfTemplateCache, getTemplateFromCache } from '../../utils/pdfContrat';
+import { getTemplateUrl, fillPdfContrat, getContratFileName, downloadBlob, buildPdfTemplateCache, getTemplateFromCache, MAX_PDF_PER_ZIP, getZipDateStamp, getContratsClientsZipName } from '../../utils/pdfContrat';
 import {
     getClientTypeContratId,
     getTypeContratLabel,
@@ -21,9 +21,11 @@ import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiRe
 const clientToPdfData = (c, types = []) => toPdfData(c, types);
 
 const DEFAULT_LIMIT = 100;
+/** Taille de page pour récupérer toute la liste lors de l'export ZIP. */
+const FETCH_ALL_PAGE_LIMIT = 1000;
 
 /**
- * Page Clients : liste des clients (paginée), modification, génération de contrat (par ligne ou page).
+ * Page Clients : liste des clients (paginée), modification, génération de contrat (par ligne ou liste totale).
  */
 export const Clients = () => {
     const { t } = useI18n();
@@ -39,7 +41,7 @@ export const Clients = () => {
     const [saving, setSaving] = useState(false);
     const [generatingId, setGeneratingId] = useState(null);
     const [generatingAll, setGeneratingAll] = useState(false);
-    /** Progression génération PDF : { current, total }. */
+    /** Progression génération : { current, total, phase?: 'fetch'|'pdf' }. */
     const [generateProgress, setGenerateProgress] = useState(null);
     const [clientToDelete, setClientToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
@@ -233,31 +235,72 @@ export const Clients = () => {
         }
     };
 
-    /** Génère les PDF des clients visibles (filtrés) ou de toute la page si pas de recherche. */
+    /** Récupère tous les clients de la liste totale (pagination API). */
+    const fetchAllClients = async (onProgress) => {
+        const all = [];
+        let pageNum = 1;
+        let pages = 1;
+        let knownTotal = total || 0;
+        do {
+            const res = await listClients(token, { page: pageNum, limit: FETCH_ALL_PAGE_LIMIT });
+            const list = extractList(res, ['clients']);
+            all.push(...list);
+            const meta = res.meta || {};
+            knownTotal = meta.total ?? all.length;
+            pages = meta.totalPages ?? Math.max(1, Math.ceil(knownTotal / (meta.limit ?? FETCH_ALL_PAGE_LIMIT)));
+            onProgress?.({ current: all.length, total: knownTotal });
+            if (list.length < FETCH_ALL_PAGE_LIMIT) break;
+            pageNum++;
+        } while (pageNum <= pages);
+        return all;
+    };
+
+    /** Génère les PDF de toute la liste clients et les télécharge en une ou plusieurs archives ZIP nommées. */
     const handleGenerateAll = async () => {
-        const toGenerate = displayedClients;
-        if (toGenerate.length === 0) {
+        if (!token || total === 0) {
             sendToastError(t('clients.noClientToProcess'));
             return;
         }
-        const total = toGenerate.length;
-        const CHUNK_SIZE =
-            total <= 500 ? 500
-            : total <= 2000 ? 200
-            : total <= 5000 ? 200
-            : total <= 15000 ? 150
-            : 100;
-        const MAX_PDF_PER_ZIP = 1000;
         setGeneratingAll(true);
-        setGenerateProgress({ current: 0, total });
+        setGenerateProgress({ current: 0, total: total || 1, phase: 'fetch' });
         try {
+            const toGenerate = await fetchAllClients((progress) => {
+                setGenerateProgress({ ...progress, phase: 'fetch' });
+            });
+            if (toGenerate.length === 0) {
+                sendToastError(t('clients.noClientToProcess'));
+                return;
+            }
+            const clientsTotal = toGenerate.length;
+            const CHUNK_SIZE =
+                clientsTotal <= 500 ? 500
+                : clientsTotal <= 2000 ? 200
+                : clientsTotal <= 5000 ? 200
+                : clientsTotal <= 15000 ? 150
+                : 100;
+            const expectedArchives = Math.max(1, Math.ceil(clientsTotal / MAX_PDF_PER_ZIP));
+            const dateStamp = getZipDateStamp();
+            setGenerateProgress({ current: 0, total: clientsTotal, phase: 'pdf' });
             const templateCache = await buildPdfTemplateCache(types);
             const usedNames = new Set();
-            const zipBlobs = [];
             let zip = new JSZip();
             let countInZip = 0;
-            for (let start = 0; start < total; start += CHUNK_SIZE) {
-                const end = Math.min(start + CHUNK_SIZE, total);
+            let archiveIndex = 0;
+            let archivesDownloaded = 0;
+
+            const flushZip = async () => {
+                if (countInZip === 0) return;
+                archiveIndex += 1;
+                const blob = await zip.generateAsync({ type: 'blob' });
+                downloadBlob(blob, getContratsClientsZipName(archiveIndex, expectedArchives, dateStamp));
+                archivesDownloaded += 1;
+                zip = new JSZip();
+                countInZip = 0;
+                await new Promise((r) => setTimeout(r, 300));
+            };
+
+            for (let start = 0; start < clientsTotal; start += CHUNK_SIZE) {
+                const end = Math.min(start + CHUNK_SIZE, clientsTotal);
                 const batch = toGenerate.slice(start, end);
                 const results = await Promise.all(
                     batch.map(async (c) => {
@@ -286,30 +329,21 @@ export const Clients = () => {
                     zip.file(fileName, item.filled, { binary: true });
                     countInZip++;
                     if (countInZip >= MAX_PDF_PER_ZIP) {
-                        setGenerateProgress({ current: end, total });
-                        zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
-                        zip = new JSZip();
-                        countInZip = 0;
-                        await new Promise((r) => setTimeout(r, 0));
+                        setGenerateProgress({ current: end, total: clientsTotal, phase: 'pdf' });
+                        await flushZip();
                     }
                 }
-                setGenerateProgress({ current: end, total });
+                setGenerateProgress({ current: end, total: clientsTotal, phase: 'pdf' });
                 await new Promise((r) => setTimeout(r, 0));
             }
-            if (countInZip > 0) {
-                zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
-            }
+            await flushZip();
             const count = usedNames.size;
             if (count === 0) {
                 sendToastError(t('clients.noContractGenerated'));
                 return;
             }
-            for (let z = 0; z < zipBlobs.length; z++) {
-                downloadBlob(zipBlobs[z], zipBlobs.length > 1 ? `contrats_clients_${z + 1}.zip` : 'contrats_clients.zip');
-                if (z < zipBlobs.length - 1) await new Promise((r) => setTimeout(r, 300));
-            }
-            sendToastSuccess(zipBlobs.length > 1
-                ? t('clients.zipDoneMulti', { count, archives: zipBlobs.length })
+            sendToastSuccess(archivesDownloaded > 1
+                ? t('clients.zipDoneMulti', { count, archives: archivesDownloaded })
                 : t('clients.zipDoneSingle', { count }));
         } catch (err) {
             sendToastError(getApiErrorMessage(err, t('clients.generateError')));
@@ -356,10 +390,14 @@ export const Clients = () => {
                                                 <span className="ms-1">{t('clients.deleteSelectionTitle', { count: selectedIds.length })}</span>
                                             </button>
                                         )}
-                                        <button type="button" className="btn btn-success btn-sm flex-shrink-0" onClick={handleGenerateAll} disabled={generatingAll || displayedClients.length === 0} title={t('clients.generateVisibleZip')}>
+                                        <button type="button" className="btn btn-success btn-sm flex-shrink-0" onClick={handleGenerateAll} disabled={generatingAll || total === 0} title={t('clients.generateAllZip')}>
                                                 <i className={`iconoir-download ${generatingAll ? 'opacity-50' : ''}`} style={{ fontSize: '1.1rem' }} />
                                                 {generatingAll ? (
-                                                    <span className="ms-1">{generateProgress ? t('clients.generatingLabel', { current: generateProgress.current.toLocaleString('fr-FR'), total: generateProgress.total.toLocaleString('fr-FR') }) : t('clients.generatingShort')}</span>
+                                                    <span className="ms-1">{generateProgress
+                                                        ? (generateProgress.phase === 'fetch'
+                                                            ? t('clients.fetchingClientsLabel', { current: generateProgress.current.toLocaleString('fr-FR'), total: generateProgress.total.toLocaleString('fr-FR') })
+                                                            : t('clients.generatingLabel', { current: generateProgress.current.toLocaleString('fr-FR'), total: generateProgress.total.toLocaleString('fr-FR') }))
+                                                        : t('clients.generatingShort')}</span>
                                                 ) : (
                                                     <span className="ms-1">{t('clients.generateZip')}</span>
                                                 )}

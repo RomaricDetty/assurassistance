@@ -235,3 +235,25 @@ export function downloadBlob(blob, fileName) {
     a.click();
     URL.revokeObjectURL(url);
 }
+
+/** Nombre max de PDF par archive ZIP (export clients / import Excel). */
+export const MAX_PDF_PER_ZIP = 1000;
+
+/** Date du jour au format YYYY-MM-DD pour nommer les archives. */
+export function getZipDateStamp() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+/**
+ * Nom d'archive ZIP pour l'export de contrats clients.
+ * Ex. : contrats_clients_2026-09-28.zip ou contrats_clients_2026-09-28_partie-01.zip
+ */
+export function getContratsClientsZipName(partIndex, totalParts, dateStamp = getZipDateStamp()) {
+    if (totalParts <= 1) return `contrats_clients_${dateStamp}.zip`;
+    const part = String(partIndex).padStart(2, '0');
+    return `contrats_clients_${dateStamp}_partie-${part}.zip`;
+}

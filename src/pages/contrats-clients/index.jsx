@@ -12,7 +12,10 @@ import {
     getContratFileName,
     downloadBlob,
     buildPdfTemplateCache,
-    getTemplateFromCache
+    getTemplateFromCache,
+    MAX_PDF_PER_ZIP,
+    getZipDateStamp,
+    getContratsClientsZipName
 } from '../../utils/pdfContrat';
 import {
     buildClientPayload,
@@ -428,11 +431,25 @@ export const ContratsClients = () => {
                     : total <= 5000 ? 500
                     : total <= 15000 ? 500
                     : 300;
-                const MAX_PDF_PER_ZIP = 2500;
+                const expectedArchives = Math.max(1, Math.ceil(total / MAX_PDF_PER_ZIP));
+                const dateStamp = getZipDateStamp();
                 const usedNames = new Set();
-                const zipBlobs = [];
                 let zip = new JSZip();
                 let countInZip = 0;
+                let archiveIndex = 0;
+                let archivesDownloaded = 0;
+
+                const flushZip = async () => {
+                    if (countInZip === 0) return;
+                    archiveIndex += 1;
+                    setExcelProgress({ phase: 'zip', current: Math.min(usedNames.size, total), total });
+                    const blob = await zip.generateAsync({ type: 'blob' });
+                    downloadBlob(blob, getContratsClientsZipName(archiveIndex, expectedArchives, dateStamp));
+                    archivesDownloaded += 1;
+                    zip = new JSZip();
+                    countInZip = 0;
+                    await new Promise((r) => setTimeout(r, 300));
+                };
 
                 setExcelProgress({ phase: 'pdf', current: 0, total });
                 const templateCache = await buildPdfTemplateCache(types);
@@ -461,28 +478,21 @@ export const ContratsClients = () => {
                         zip.file(fileName, item.filled, { binary: true });
                         countInZip++;
                         if (countInZip >= MAX_PDF_PER_ZIP) {
-                            setExcelProgress({ phase: 'zip', current: end, total });
-                            zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
-                            zip = new JSZip();
-                            countInZip = 0;
-                            await new Promise((r) => setTimeout(r, 0));
+                            await flushZip();
                         }
                     }
                     setExcelProgress({ phase: 'pdf', current: end, total });
                     await new Promise((r) => setTimeout(r, 0));
                 }
-                if (countInZip > 0) {
-                    setExcelProgress({ phase: 'zip', current: total, total });
-                    zipBlobs.push(await zip.generateAsync({ type: 'blob' }));
-                }
+                await flushZip();
                 setExcelProgress(null);
-                for (let z = 0; z < zipBlobs.length; z++) {
-                    downloadBlob(zipBlobs[z], zipBlobs.length > 1 ? `contrats_clients_${z + 1}.zip` : 'contrats_clients.zip');
-                    if (z < zipBlobs.length - 1) await new Promise((r) => setTimeout(r, 300));
+                if (archivesDownloaded === 0) {
+                    sendToastError(t('contractsClients.generateError'));
+                } else {
+                    sendToastSuccess(archivesDownloaded > 1
+                        ? t('contractsClients.zipDoneMulti', { count: usedNames.size, archives: archivesDownloaded })
+                        : t('contractsClients.zipDoneSingle', { count: usedNames.size }));
                 }
-                sendToastSuccess(zipBlobs.length > 1
-                    ? t('contractsClients.zipDoneMulti', { count: toGenerate.length, archives: zipBlobs.length })
-                    : t('contractsClients.zipDoneSingle', { count: toGenerate.length }));
             } else if (duplicateCount === 0 && !firstOtherErrorMessage) {
                 sendToastError(t('contractsClients.noClientSaved'));
             }
