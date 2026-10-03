@@ -245,13 +245,13 @@ export const Administration = () => {
                                                 </select>
                                                 <span className="text-muted small">{t('administration.totalAdmins', { count: total })}</span>
                                             </div>
-                                            <nav aria-label="Pagination du tableau">
+                                            <nav className="d-flex flex-wrap align-items-center justify-content-end gap-2" aria-label="Pagination du tableau">
                                                 <ul className="pagination pagination-sm mb-0">
                                                     <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
                                                         <button type="button" className="page-link" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>{t('administration.previous')}</button>
                                                     </li>
-                                                    {totalPages > 1 && Array.from({ length: totalPages }, (_, i) => i + 1)
-                                                        .filter((p) => p === 1 || p === totalPages || (p >= page - 2 && p <= page + 2))
+                                                    {Array.from({ length: Math.max(totalPages, 1) }, (_, i) => i + 1)
+                                                        .filter((p) => p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1))
                                                         .map((p, i, arr) => (
                                                             <React.Fragment key={p}>
                                                                 {i > 0 && arr[i - 1] !== p - 1 && <li className="page-item disabled"><span className="page-link">…</span></li>}
@@ -264,7 +264,7 @@ export const Administration = () => {
                                                         <button type="button" className="page-link" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>{t('administration.next')}</button>
                                                     </li>
                                                 </ul>
-                                                <span className="ms-2 text-muted small">{t('clients.page', { page, total: totalPages || 1 })}</span>
+                                                <span className="pagination-meta text-muted small">{t('clients.page', { page, total: totalPages || 1 })}</span>
                                             </nav>
                                         </div>
                                     )}

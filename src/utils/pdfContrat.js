@@ -1,4 +1,17 @@
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import {
+    PDFDocument,
+    StandardFonts,
+    PDFName,
+    PDFBool,
+    PDFHexString,
+    pushGraphicsState,
+    popGraphicsState,
+    moveTo,
+    lineTo,
+    closePath,
+    clip,
+    endPath
+} from 'pdf-lib';
 import { getClientTypeCode } from './typeContrat';
 
 export { buildPdfTemplateCache, getTemplateFromCache, getTemplateUrl, resolvePdfUrl } from './typeContrat';
@@ -8,47 +21,80 @@ export { buildPdfTemplateCache, getTemplateFromCache, getTemplateUrl, resolvePdf
  * Seuls Prénoms, Nom et ID / N° de carte sont pré-remplis.
  */
 const FIELD_MAPPING = {
-    prenom: ['Prénoms', 'Prenoms', 'prenom', 'Prenom', 'Prénom', 'prenoms', 'firstname'],
-    nom: ['Nom', 'nom', 'NOM', 'nom_client', 'NomClient', 'lastname', 'nom_titulaire'],
-    idCarte: ['ID / N° Carte', 'ID Carte', 'N° Carte', 'idCarte', 'numero_carte', 'NumeroCarte', 'carte', 'card_number']
+    prenom: ['prenom_client', 'Prénoms', 'Prenoms', 'prenom', 'Prenom', 'Prénom', 'prenoms', 'firstname'],
+    nom: ['nom_client', 'Nom', 'nom', 'NOM', 'NomClient', 'lastname', 'nom_titulaire'],
+    idCarte: ['numero_carte', 'ID / N° Carte', 'ID Carte', 'N° Carte', 'idCarte', 'NumeroCarte', 'carte', 'card_number']
 };
+
+/**
+ * Zones fixes de secours (si pas d'AcroForm), alignées sur Date de Naissance.
+ */
+const FIELD_BOXES = {
+    prenom: { x: 70.71, y: 702.14, width: 55.09, height: 8.22 },
+    nom: { x: 128.68, y: 702.14, width: 53.04, height: 8.22 },
+    idCarte: { x: 240.51, y: 702.14, width: 86.75, height: 8.22 }
+};
+
+/** Taille max (lisible) — on descend seulement si le texte déborde. */
+const FONT_SIZE_MAX = 6;
+
+/** Taille min pour 2 lignes dans la hauteur d'origine (~8.2 pt). */
+const FONT_SIZE_MIN = 3;
+
+/** Marge intérieure horizontale dans la zone. */
+const FIELD_PADDING = 2;
+
+/** Marge de sécurité anti-clipping (le rendu AcroForm coupe trop tôt). */
+const WIDTH_SAFETY = 2;
+
+/** Espacement vertical entre 2 lignes. */
+const LINE_GAP = 0.4;
+
+/** Padding vertical interne pour éviter le débordement. */
+const VERTICAL_PADDING = 0.6;
+
+/** Clés autorisées à s'afficher sur 2 lignes. */
+const TWO_LINE_KEYS = new Set(['prenom', 'nom']);
+
+/** Ellipse ASCII (compatible Helvetica / WinAnsi). */
+const ELLIPSIS = '...';
 
 /**
  * Normalise un nom de champ pour la comparaison (minuscules, sans espaces superflus).
  */
 function normalizeName(str) {
-    return String(str ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
+    return String(str ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /**
  * Trouve le premier champ du formulaire PDF dont le nom correspond (exact ou contient un mot-clé).
- * Essaye d'abord la correspondance exacte, puis une correspondance "contient" pour capter
- * des noms comme "Text1.Nom" ou "Prénoms_titulaire".
  */
 function findFieldByName(form, possibleNames, excludeKeywords = []) {
     const fields = form.getFields();
     for (const name of possibleNames) {
         const n = normalizeName(name);
-        const field = fields.find(f => {
+        const exact = fields.find((f) => {
+            const fn = normalizeName(f.getName?.() ?? f.name ?? '');
+            if (!fn) return false;
+            const excluded = excludeKeywords.some((kw) => fn.includes(normalizeName(kw)));
+            return !excluded && fn === n;
+        });
+        if (exact) return exact;
+    }
+    for (const name of possibleNames) {
+        const n = normalizeName(name);
+        const field = fields.find((f) => {
             const fn = normalizeName(f.getName?.() ?? f.name ?? '');
             if (!fn) return false;
             if (fn === n || fn.includes(n) || n.includes(fn)) {
-                const excluded = excludeKeywords.some(kw => fn.includes(normalizeName(kw)));
+                const excluded = excludeKeywords.some((kw) => fn.includes(normalizeName(kw)));
                 return !excluded;
             }
             return false;
         });
         if (field) return field;
     }
-    // Fallback : champ dont le nom contient le premier mot-clé (ex. "nom" sans "prenom")
-    const firstKey = normalizeName(possibleNames[0]);
-    return fields.find(f => {
-        const fn = normalizeName(f.getName?.() ?? f.name ?? '');
-        if (!fn || fn.length < 2) return false;
-        const hasKey = firstKey.length >= 2 && (fn.includes(firstKey) || firstKey.includes(fn));
-        const excluded = excludeKeywords.some(kw => fn.includes(normalizeName(kw)));
-        return hasKey && !excluded;
-    }) || null;
+    return null;
 }
 
 /**
@@ -62,7 +108,7 @@ export async function listPdfFormFieldNames(pdfBytes) {
     try {
         const form = doc.getForm();
         if (form) {
-            form.getFields().forEach(f => {
+            form.getFields().forEach((f) => {
                 const n = f.getName?.() ?? f.name ?? '';
                 if (n) names.push(n);
             });
@@ -74,38 +120,9 @@ export async function listPdfFormFieldNames(pdfBytes) {
 }
 
 /**
- * Marge gauche du contenu dans les PDF (les tableaux ne commencent pas en x=0).
- * À augmenter si les données sont trop à gauche, à diminuer si trop à droite.
+ * Découpe un texte en 2 lignes maximum selon une longueur de ligne donnée.
+ * Conservé pour compatibilité des tests / usages existants.
  */
-const MARGIN_LEFT_PT = 72;
-
-/**
- * Largeur approximative par colonne du tableau "Assuré - Titulaire de la carte" (en points).
- * Ajuster si les colonnes du PDF ont un espacement différent.
- */
-const COLUMN_WIDTH_PT = 66;
-
-/**
- * Positions (x, y) pour la 1re ligne sous "Assuré - Titulaire de la carte".
- * Seuls Prénoms, Nom, ID / N° de carte (3 colonnes).
- */
-const OVERLAY_POSITIONS = {
-    prenom: { x: MARGIN_LEFT_PT, y: 707 },
-    nom: { x: MARGIN_LEFT_PT + COLUMN_WIDTH_PT - 5, y: 707 },
-    idCarte: { x: MARGIN_LEFT_PT + (COLUMN_WIDTH_PT * 3) - 30, y: 705 }
-};
-
-const FONT_SIZE = 4;
-const SECOND_LINE_Y_OFFSET = 4;
-
-/** Longueur max pour éviter les chevauchements dans le PDF. */
-const MAX_LENGTH_BY_FIELD = {
-    prenom: 21,
-    nom: 19,
-    idCarte: 24
-};
-
-/** Découpe un texte en 2 lignes maximum selon une longueur de ligne donnée. */
 export function splitTextInTwoLines(value, maxLenPerLine) {
     const text = String(value ?? '').trim();
     if (!text) return [];
@@ -127,101 +144,409 @@ export function splitTextInTwoLines(value, maxLenPerLine) {
 }
 
 /**
- * Dessine les données en overlay sur la première page (fallback quand pas de champs AcroForm).
+ * Normalise le texte à afficher dans une zone (une seule ligne, texte complet).
  */
-function drawTextOverlay(doc, data) {
+function normalizeFieldText(value) {
+    return String(value ?? '').trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Largeur utile réelle (padding + marge anti-clipping).
+ * @param {number} width
+ * @returns {number}
+ */
+function usableTextWidth(width) {
+    return Math.max(1, width - WIDTH_SAFETY);
+}
+
+/**
+ * Rectangle du widget AcroForm.
+ * @param {object} field
+ * @returns {{ x: number, y: number, width: number, height: number } | null}
+ */
+function getWidgetRect(field) {
+    try {
+        return field.acroField.getWidgets?.()?.[0]?.getRectangle?.() ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Supprime les apparences figées du champ (évite le texte AcroForm coupé par-dessus).
+ * @param {object} field
+ */
+function clearFieldAppearances(field) {
+    try {
+        const widgets = field.acroField.getWidgets?.() || [];
+        widgets.forEach((widget) => widget.dict.delete(PDFName.of('AP')));
+    } catch {
+        // ignore
+    }
+}
+
+/**
+ * Taille max pour N lignes dans une hauteur de zone donnée (sans déborder).
+ * @param {number} height
+ * @param {number} lineCount
+ * @returns {number}
+ */
+function maxFontSizeForLineCount(height, lineCount) {
+    const lines = Math.max(1, lineCount);
+    const available = height - VERTICAL_PADDING * 2;
+    const maxSize = (available - LINE_GAP * (lines - 1)) / lines;
+    const stepped = Math.floor(maxSize * 4) / 4;
+    return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, stepped));
+}
+
+/**
+ * Ajoute une infobulle avec le texte complet (survol dans les lecteurs compatibles).
+ * @param {object} field
+ * @param {string} text
+ */
+function setFieldTooltip(field, text) {
+    try {
+        field.acroField.dict.set(PDFName.of('TU'), PDFHexString.fromText(text));
+    } catch {
+        // ignore
+    }
+}
+
+/**
+ * Tronque un texte pour qu'il tienne en largeur, avec ellipse (coupe au mot si possible).
+ * @param {import('pdf-lib').PDFFont} font
+ * @param {string} text
+ * @param {number} maxWidth
+ * @param {number} fontSize
+ * @returns {string}
+ */
+function truncateToWidth(font, text, maxWidth, fontSize) {
+    if (font.widthOfTextAtSize(text, fontSize) <= maxWidth) return text;
+    if (font.widthOfTextAtSize(ELLIPSIS, fontSize) > maxWidth) return '';
+
+    let lo = 0;
+    let hi = text.length;
+    while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const candidate = `${text.slice(0, mid).trimEnd()}${ELLIPSIS}`;
+        if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) lo = mid;
+        else hi = mid - 1;
+    }
+
+    let cut = text.slice(0, lo).trimEnd();
+    const lastSpace = cut.lastIndexOf(' ');
+    if (lastSpace > Math.floor(lo * 0.45)) cut = cut.slice(0, lastSpace).trimEnd();
+    return cut ? `${cut}${ELLIPSIS}` : ELLIPSIS;
+}
+
+/**
+ * Dispose un texte sur 1 ou 2 lignes (retour naturel sur les espaces).
+ * @param {import('pdf-lib').PDFFont} font
+ * @param {string} text
+ * @param {number} maxWidth
+ * @param {number} fontSize
+ * @returns {{ lines: string[], fits: boolean }}
+ */
+export function layoutTextMaxTwoLines(font, text, maxWidth, fontSize) {
+    const value = normalizeFieldText(text);
+    if (!value) return { lines: [], fits: true };
+    if (font.widthOfTextAtSize(value, fontSize) <= maxWidth) {
+        return { lines: [value], fits: true };
+    }
+
+    const words = value.split(/\s+/).filter(Boolean);
+    const line1Words = [];
+    let index = 0;
+
+    while (index < words.length) {
+        const trial = [...line1Words, words[index]].join(' ');
+        if (font.widthOfTextAtSize(trial, fontSize) <= maxWidth) {
+            line1Words.push(words[index]);
+            index += 1;
+        } else {
+            break;
+        }
+    }
+
+    if (line1Words.length === 0) {
+        const line1 = truncateToWidth(font, words[0], maxWidth, fontSize);
+        const rest = words.slice(1).join(' ');
+        if (!rest) {
+            return { lines: [line1], fits: line1 === words[0] };
+        }
+        if (font.widthOfTextAtSize(rest, fontSize) <= maxWidth) {
+            return { lines: [line1, rest], fits: line1 === words[0] };
+        }
+        return {
+            lines: [line1, truncateToWidth(font, rest, maxWidth, fontSize)],
+            fits: false
+        };
+    }
+
+    const line1 = line1Words.join(' ');
+    const remaining = words.slice(index).join(' ');
+    if (!remaining) return { lines: [line1], fits: true };
+
+    if (font.widthOfTextAtSize(remaining, fontSize) <= maxWidth) {
+        return { lines: [line1, remaining], fits: true };
+    }
+
+    return {
+        lines: [line1, truncateToWidth(font, remaining, maxWidth, fontSize)],
+        fits: false
+    };
+}
+
+/**
+ * Plus grande taille pour un texte sur une seule ligne.
+ * @param {import('pdf-lib').PDFFont} font
+ * @param {string} text
+ * @param {number} maxWidth
+ * @returns {number}
+ */
+function computeFitFontSizeSingleLine(font, text, maxWidth) {
+    const width = usableTextWidth(maxWidth);
+    let size = FONT_SIZE_MAX;
+    while (size > FONT_SIZE_MIN && font.widthOfTextAtSize(text, size) > width) {
+        size -= 0.25;
+    }
+    return Math.max(FONT_SIZE_MIN, size);
+}
+
+/**
+ * Plus grande taille pour un texte sur 2 lignes max, sans dépasser la hauteur de zone.
+ * @param {import('pdf-lib').PDFFont} font
+ * @param {string} text
+ * @param {number} maxWidth
+ * @param {number} maxHeight
+ * @returns {number}
+ */
+function computeFitFontSizeTwoLines(font, text, maxWidth, maxHeight) {
+    const width = usableTextWidth(maxWidth);
+
+    // 1 ligne confortable → taille haute.
+    for (let size = FONT_SIZE_MAX; size >= FONT_SIZE_MIN; size -= 0.25) {
+        if (font.widthOfTextAtSize(text, size) <= width) return size;
+    }
+
+    // 2 lignes dans la hauteur d'origine (pas d'agrandissement = pas de chevauchement).
+    let size = maxFontSizeForLineCount(maxHeight, 2);
+    while (size > FONT_SIZE_MIN) {
+        if (layoutTextMaxTwoLines(font, text, width, size).fits) return size;
+        size -= 0.25;
+    }
+    return FONT_SIZE_MIN;
+}
+
+/**
+ * Taille unique pour les 3 champs (2 lignes pour Prénoms/Nom, dans la zone d'origine).
+ * @param {import('pdf-lib').PDFFont} font
+ * @param {Array<{ key: string, text: string, width: number, height?: number }>} items
+ * @returns {number}
+ */
+function computeUniformFontSize(font, items) {
+    if (!items.length) return FONT_SIZE_MAX;
+    let size = FONT_SIZE_MAX;
+    for (const { key, text, width, height = 8.22 } of items) {
+        const fitted = TWO_LINE_KEYS.has(key)
+            ? computeFitFontSizeTwoLines(font, text, width, height)
+            : computeFitFontSizeSingleLine(font, text, width);
+        size = Math.min(size, fitted);
+    }
+    return size;
+}
+
+/**
+ * Prépare un champ AcroForm en lecture seule (valeur complète, sans apparence clippée).
+ * @param {object} field
+ * @param {string} value
+ * @returns {boolean}
+ */
+function prepareReadOnlyField(field, value) {
+    if (!field || typeof field.setText !== 'function') return false;
+    const fullText = normalizeFieldText(value);
+    if (!fullText) return false;
+
+    if (typeof field.disableMultiline === 'function') field.disableMultiline();
+    if (typeof field.disableScrolling === 'function') {
+        try {
+            field.disableScrolling();
+        } catch {
+            // ignore
+        }
+    }
+    field.setText(fullText);
+    setFieldTooltip(field, fullText);
+    if (typeof field.enableReadOnly === 'function') field.enableReadOnly();
+    clearFieldAppearances(field);
+    return true;
+}
+
+/**
+ * Dessine 1 ou 2 lignes dans la zone d'origine (clipée, sans agrandissement).
+ */
+function drawTextInFixedBox(page, font, text, box, fontSize, allowTwoLines) {
+    const value = normalizeFieldText(text);
+    if (!value || !box) return;
+
+    const width = usableTextWidth(box.width - FIELD_PADDING);
+    const { lines } = allowTwoLines
+        ? layoutTextMaxTwoLines(font, value, width, fontSize)
+        : {
+            lines: [
+                font.widthOfTextAtSize(value, fontSize) > width
+                    ? truncateToWidth(font, value, width, fontSize)
+                    : value
+            ]
+        };
+
+    const lineCount = Math.max(1, lines.length);
+    const blockHeight = fontSize * lineCount + LINE_GAP * (lineCount - 1);
+    const startY = box.y + (box.height - blockHeight) / 2;
+
+    page.pushOperators(
+        pushGraphicsState(),
+        moveTo(box.x, box.y),
+        lineTo(box.x + box.width, box.y),
+        lineTo(box.x + box.width, box.y + box.height),
+        lineTo(box.x, box.y + box.height),
+        closePath(),
+        clip(),
+        endPath()
+    );
+
+    lines.forEach((line, index) => {
+        page.drawText(line, {
+            x: box.x + 1,
+            y: startY + (lineCount - 1 - index) * (fontSize + LINE_GAP),
+            size: fontSize,
+            font
+        });
+    });
+
+    page.pushOperators(popGraphicsState());
+}
+
+/**
+ * Overlay de secours : même police/taille ; Prénoms/Nom sur 2 lignes max.
+ */
+function drawTextOverlay(doc, data, font, skipKeys = new Set()) {
     const pages = doc.getPages();
     if (pages.length === 0) return;
     const page = pages[0];
-    const font = doc.embedStandardFont(StandardFonts.Helvetica);
 
     const values = [
         ['prenom', data.prenom || ''],
         ['nom', data.nom || ''],
         ['idCarte', data.idCarte || '']
-    ];
+    ].filter(([key, value]) => value && !skipKeys.has(key));
+
+    const sizeItems = values.map(([key, value]) => ({
+        key,
+        text: normalizeFieldText(value),
+        width: (FIELD_BOXES[key]?.width ?? 50) - FIELD_PADDING,
+        height: FIELD_BOXES[key]?.height ?? 8.22
+    }));
+    const fontSize = computeUniformFontSize(font, sizeItems);
 
     for (const [key, value] of values) {
-        const pos = OVERLAY_POSITIONS[key];
-        if (!pos || value === '') continue;
-        const maxLen = MAX_LENGTH_BY_FIELD[key] ?? 25;
-        const isMultiLineField = key === 'prenom' || key === 'nom';
-
-        if (isMultiLineField) {
-            const lines = splitTextInTwoLines(value, maxLen).slice(0, 2);
-            const startY = lines.length > 1 ? pos.y : 705;
-            lines.forEach((line, index) => {
-                page.drawText(line, {
-                    x: pos.x,
-                    y: startY - (index * SECOND_LINE_Y_OFFSET),
-                    size: FONT_SIZE,
-                    font
-                });
-            });
-            continue;
-        }
-
-        const text = String(value).trim().substring(0, maxLen);
-        page.drawText(text, {
-            x: pos.x,
-            y: pos.y,
-            size: FONT_SIZE,
-            font
-        });
+        drawTextInFixedBox(
+            page,
+            font,
+            value,
+            FIELD_BOXES[key],
+            fontSize,
+            TWO_LINE_KEYS.has(key)
+        );
     }
 }
 
 /**
- * Pré-remplit un PDF avec Prénoms, Nom, ID / N° de carte.
+ * Pré-remplit un PDF avec Prénoms, Nom, ID / N° de carte
+ * (lecture seule, même police/taille ; Prénoms/Nom sur 2 lignes max).
  * @param {ArrayBuffer} pdfBytes - Contenu binaire du template PDF
  * @param {Object} data - { prenom, nom, idCarte }
  * @returns {Promise<Uint8Array>}
  */
 export async function fillPdfContrat(pdfBytes, data) {
     const doc = await PDFDocument.load(pdfBytes);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const filledKeys = new Set();
+    let hasAcroForm = false;
 
     try {
         const form = doc.getForm();
         if (form && form.getFields().length > 0) {
+            hasAcroForm = true;
+            const page = doc.getPages()[0];
             const entries = [
                 ['prenom', data.prenom, []],
-                ['nom', data.nom, ['prenom', 'prénom', 'prénoms']],
+                ['nom', data.nom, ['prenom', 'prénom', 'prénoms', 'ayantdroit']],
                 ['idCarte', data.idCarte, []]
             ];
 
+            /** @type {Array<{ key: string, field: object, text: string, width: number, height: number, rect: object }>} */
+            const targets = [];
             for (const [key, value, excludeKeywords] of entries) {
                 if (value == null || value === '') continue;
                 const possibleNames = FIELD_MAPPING[key];
                 if (!possibleNames) continue;
                 const field = findFieldByName(form, possibleNames, excludeKeywords || []);
-                if (field) {
-                    if (field.constructor.name === 'PDFTextField') {
-                        field.setText(String(value));
-                    }
-                    if (field.constructor.name === 'PDFCheckBox' && (value === '1' || value === 'Oui' || value === 'X' || value === 'x')) {
-                        field.check();
-                    }
-                }
+                if (!field) continue;
+                const text = normalizeFieldText(value);
+                if (!text) continue;
+                const rect = getWidgetRect(field);
+                if (!rect) continue;
+                targets.push({
+                    key,
+                    field,
+                    text,
+                    width: Math.max(1, rect.width - FIELD_PADDING),
+                    height: rect.height,
+                    rect
+                });
             }
+
+            const fontSize = computeUniformFontSize(font, targets);
+
+            for (const { key, field, text, rect } of targets) {
+                prepareReadOnlyField(field, text);
+                // Dessin page maîtrisé (2 lignes / troncature) — évite le clipping AcroForm.
+                drawTextInFixedBox(
+                    page,
+                    font,
+                    text,
+                    rect,
+                    fontSize,
+                    TWO_LINE_KEYS.has(key)
+                );
+                filledKeys.add(key);
+            }
+
+            // Pas de NeedAppearances : sinon le viewer redessine un texte coupé par-dessus.
+            form.acroForm.dict.set(PDFName.of('NeedAppearances'), PDFBool.False);
         }
     } catch {
-        // ignore
+        hasAcroForm = false;
     }
 
-    // Overlay de texte pour que les données apparaissent même sans champs formulaire (ou en complément)
-    drawTextOverlay(doc, data);
+    if (!hasAcroForm) {
+        drawTextOverlay(doc, data, font, filledKeys);
+    }
 
-    return doc.save();
+    return doc.save({ updateFieldAppearances: false });
 }
 
 /**
- * Génère un nom de fichier pour le contrat : Nom_Prenom_TypeContrat.pdf
+ * Génère un nom de fichier pour le contrat : Nom_Prenom_TypeContrat_NumeroCarte.pdf
  */
 export function getContratFileName(data) {
     const nom = (data.nom || 'Client').replace(/\s+/g, '_');
     const prenom = (data.prenom || '').replace(/\s+/g, '_');
     const type = data.typeContrat || getClientTypeCode(data) || 'Contrat';
-    return `${nom}_${prenom}_${type}.pdf`.replace(/_+/g, '_');
+    const idCarte = String(data.idCarte ?? '').trim().replace(/\s+/g, '_').replace(/[\\/:*?"<>|]/g, '');
+    const parts = [nom, prenom, type, idCarte].filter(Boolean);
+    return `${parts.join('_')}.pdf`.replace(/_+/g, '_');
 }
 
 /**

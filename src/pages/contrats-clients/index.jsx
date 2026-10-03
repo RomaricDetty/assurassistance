@@ -705,13 +705,13 @@ export const ContratsClients = () => {
                                                         </select>
                                                         <span className="text-muted small">{t('clients.totalClients', { count: agentClientsTotal })}</span>
                                                     </div>
-                                                    <nav aria-label={t('contractsClients.myClientsTitle')}>
+                                                    <nav className="d-flex flex-wrap align-items-center justify-content-end gap-2" aria-label={t('contractsClients.myClientsTitle')}>
                                                         <ul className="pagination pagination-sm mb-0">
                                                             <li className={`page-item ${agentClientsPage <= 1 ? 'disabled' : ''}`}>
                                                                 <button type="button" className="page-link" onClick={() => setAgentClientsPage((p) => Math.max(1, p - 1))} disabled={agentClientsPage <= 1}>{t('clients.previous')}</button>
                                                             </li>
-                                                            {agentClientsTotalPages > 1 && Array.from({ length: agentClientsTotalPages }, (_, i) => i + 1)
-                                                                .filter((p) => p === 1 || p === agentClientsTotalPages || (p >= agentClientsPage - 2 && p <= agentClientsPage + 2))
+                                                            {Array.from({ length: Math.max(agentClientsTotalPages, 1) }, (_, i) => i + 1)
+                                                                .filter((p) => p === 1 || p === agentClientsTotalPages || (p >= agentClientsPage - 1 && p <= agentClientsPage + 1))
                                                                 .map((p, i, arr) => (
                                                                     <React.Fragment key={p}>
                                                                         {i > 0 && arr[i - 1] !== p - 1 && <li className="page-item disabled"><span className="page-link">…</span></li>}
@@ -724,7 +724,7 @@ export const ContratsClients = () => {
                                                                 <button type="button" className="page-link" onClick={() => setAgentClientsPage((p) => Math.min(agentClientsTotalPages, p + 1))} disabled={agentClientsPage >= agentClientsTotalPages}>{t('clients.next')}</button>
                                                             </li>
                                                         </ul>
-                                                        <span className="ms-2 text-muted small">{t('clients.page', { page: agentClientsPage, total: agentClientsTotalPages || 1 })}</span>
+                                                        <span className="pagination-meta text-muted small">{t('clients.page', { page: agentClientsPage, total: agentClientsTotalPages || 1 })}</span>
                                                     </nav>
                                                 </div>
                                             </>

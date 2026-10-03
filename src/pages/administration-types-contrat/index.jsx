@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout } from '../../components/layout';
 import { Footer } from '../../components/footer';
@@ -14,12 +14,15 @@ import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
 import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 import { resolvePdfUrl } from '../../utils/typeContrat';
+import { ConfirmDeleteModal } from '../../components/confirm-delete-modal';
 
 const INITIAL_FORM = {
     code: '',
     libelle: '',
     isActive: true
 };
+
+const DEFAULT_LIMIT = 10;
 
 /** Extrait le nom de fichier affichable depuis un chemin PDF. */
 const getPdfDisplayName = (path) => {
@@ -45,6 +48,8 @@ export const AdministrationTypesContrat = () => {
     const [saving, setSaving] = useState(false);
     const [typeToDelete, setTypeToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(DEFAULT_LIMIT);
 
     /** Charge la liste des types de contrat. */
     const fetchTypes = useCallback(async () => {
@@ -64,6 +69,20 @@ export const AdministrationTypesContrat = () => {
     useEffect(() => {
         fetchTypes();
     }, [fetchTypes]);
+
+    const total = types.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
+
+    /** Recadre la page courante si la liste ou la limite change. */
+    useEffect(() => {
+        if (page > totalPages) setPage(totalPages);
+    }, [page, totalPages]);
+
+    /** Types visibles sur la page courante. */
+    const displayedTypes = useMemo(() => {
+        const start = (page - 1) * limit;
+        return types.slice(start, start + limit);
+    }, [limit, page, types]);
 
     /** Ouvre la modale de création. */
     const openCreate = () => {
@@ -197,70 +216,109 @@ export const AdministrationTypesContrat = () => {
                                     {loading ? (
                                         <LoaderContainer />
                                     ) : (
-                                        <div className="table-responsive">
-                                            <table className="table table-hover mb-0">
-                                                <thead>
-                                                    <tr>
-                                                        <th>{t('contractTypes.code')}</th>
-                                                        <th>{t('contractTypes.label')}</th>
-                                                        <th>{t('contractTypes.pdfPath')}</th>
-                                                        <th>{t('contractTypes.active')}</th>
-                                                        <th width="120">{t('contractTypes.actions')}</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {types.length === 0 ? (
+                                        <>
+                                            <div className="table-responsive">
+                                                <table className="table table-hover mb-0">
+                                                    <thead>
                                                         <tr>
-                                                            <td colSpan="5" className="text-center text-muted">{t('contractTypes.noTypes')}</td>
+                                                            <th>{t('contractTypes.code')}</th>
+                                                            <th>{t('contractTypes.label')}</th>
+                                                            <th>{t('contractTypes.pdfPath')}</th>
+                                                            <th>{t('contractTypes.active')}</th>
+                                                            <th width="120">{t('contractTypes.actions')}</th>
                                                         </tr>
-                                                    ) : (
-                                                        types.map((type) => {
-                                                            const pdfUrl = resolvePdfUrl(type);
-                                                            return (
-                                                                <tr key={type.id}>
-                                                                    <td><code>{type.code}</code></td>
-                                                                    <td>{type.libelle || type.code}</td>
-                                                                    <td className="small text-break">
-                                                                        {pdfUrl ? (
-                                                                            <a href={pdfUrl} target="_blank" rel="noopener noreferrer">{type.pdfPath || type.pdfUrl}</a>
-                                                                        ) : (
-                                                                            type.pdfPath || type.pdfUrl || '—'
-                                                                        )}
-                                                                    </td>
-                                                                    <td>
-                                                                        <span className={`badge ${type.isActive !== false ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}`}>
-                                                                            {type.isActive !== false ? t('administration.yes') : t('administration.no')}
-                                                                        </span>
-                                                                    </td>
-                                                                    <td>
-                                                                        <div className="d-flex align-items-center gap-1">
-                                                                            <button
-                                                                                type="button"
-                                                                                className="btn btn-sm btn-outline-primary p-2"
-                                                                                onClick={() => openEdit(type)}
-                                                                                title={t('contractTypes.editType')}
-                                                                                aria-label={t('contractTypes.editType')}
-                                                                            >
-                                                                                <i className="iconoir-edit" style={{ fontSize: '1rem' }} />
-                                                                            </button>
-                                                                            <button
-                                                                                type="button"
-                                                                                className="btn btn-sm btn-outline-danger p-2"
-                                                                                onClick={() => setTypeToDelete(type)}
-                                                                                title={t('contractTypes.deleteType')}
-                                                                                aria-label={t('contractTypes.deleteType')}
-                                                                            >
-                                                                                <i className="iconoir-trash" style={{ fontSize: '1rem' }} />
-                                                                            </button>
-                                                                        </div>
-                                                                    </td>
-                                                                </tr>
-                                                            );
-                                                        })
-                                                    )}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                    </thead>
+                                                    <tbody>
+                                                        {types.length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan="5" className="text-center text-muted">{t('contractTypes.noTypes')}</td>
+                                                            </tr>
+                                                        ) : (
+                                                            displayedTypes.map((type) => {
+                                                                const pdfUrl = resolvePdfUrl(type);
+                                                                return (
+                                                                    <tr key={type.id}>
+                                                                        <td><code>{type.code}</code></td>
+                                                                        <td>{type.libelle || type.code}</td>
+                                                                        <td className="small text-break">
+                                                                            {pdfUrl ? (
+                                                                                <a href={pdfUrl} target="_blank" rel="noopener noreferrer">{type.pdfPath || type.pdfUrl}</a>
+                                                                            ) : (
+                                                                                type.pdfPath || type.pdfUrl || '—'
+                                                                            )}
+                                                                        </td>
+                                                                        <td>
+                                                                            <span className={`badge ${type.isActive !== false ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}`}>
+                                                                                {type.isActive !== false ? t('administration.yes') : t('administration.no')}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <div className="d-flex align-items-center gap-1">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="btn btn-sm btn-outline-primary p-2"
+                                                                                    onClick={() => openEdit(type)}
+                                                                                    title={t('contractTypes.editType')}
+                                                                                    aria-label={t('contractTypes.editType')}
+                                                                                >
+                                                                                    <i className="iconoir-edit" style={{ fontSize: '1rem' }} />
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="btn btn-sm btn-outline-danger p-2"
+                                                                                    onClick={() => setTypeToDelete(type)}
+                                                                                    title={t('contractTypes.deleteType')}
+                                                                                    aria-label={t('contractTypes.deleteType')}
+                                                                                >
+                                                                                    <i className="iconoir-trash" style={{ fontSize: '1rem' }} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="table-footer d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top">
+                                                <div className="d-flex align-items-center gap-2">
+                                                    <label className="form-label mb-0 text-nowrap">{t('contractTypes.perPage')}</label>
+                                                    <select
+                                                        className="form-select form-select-sm w-auto"
+                                                        value={limit}
+                                                        onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+                                                    >
+                                                        <option value={10}>10</option>
+                                                        <option value={25}>25</option>
+                                                        <option value={50}>50</option>
+                                                        <option value={100}>100</option>
+                                                    </select>
+                                                    <span className="text-muted small">{t('contractTypes.totalTypes', { count: total })}</span>
+                                                </div>
+                                                <nav className="d-flex flex-wrap align-items-center justify-content-end gap-2" aria-label="Pagination du tableau">
+                                                    <ul className="pagination pagination-sm mb-0">
+                                                        <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
+                                                            <button type="button" className="page-link" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>{t('contractTypes.previous')}</button>
+                                                        </li>
+                                                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                                            .filter((p) => p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1))
+                                                            .map((p, i, arr) => (
+                                                                <React.Fragment key={p}>
+                                                                    {i > 0 && arr[i - 1] !== p - 1 && <li className="page-item disabled"><span className="page-link">…</span></li>}
+                                                                    <li className={`page-item ${p === page ? 'active' : ''}`}>
+                                                                        <button type="button" className="page-link" onClick={() => setPage(p)}>{p}</button>
+                                                                    </li>
+                                                                </React.Fragment>
+                                                            ))}
+                                                        <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
+                                                            <button type="button" className="page-link" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>{t('contractTypes.next')}</button>
+                                                        </li>
+                                                    </ul>
+                                                    <span className="pagination-meta text-muted small">{t('contractTypes.page', { page, total: totalPages })}</span>
+                                                </nav>
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -353,27 +411,16 @@ export const AdministrationTypesContrat = () => {
                 </div>
             )}
 
-            {typeToDelete && (
-                <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">{t('contractTypes.deleteType')}</h5>
-                                <button type="button" className="btn-close" onClick={() => setTypeToDelete(null)} aria-label={t('common.cancel')} />
-                            </div>
-                            <div className="modal-body">
-                                <p className="mb-0">{t('contractTypes.deleteConfirm', { name: typeToDelete.libelle || typeToDelete.code })}</p>
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setTypeToDelete(null)}>{t('common.cancel')}</button>
-                                <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
-                                    {deleting ? t('contractTypes.deleting') : t('contractTypes.deleteAction')}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmDeleteModal
+                open={Boolean(typeToDelete)}
+                title={t('contractTypes.deleteType')}
+                message={t('contractTypes.deleteConfirm', { name: typeToDelete?.libelle || typeToDelete?.code || '' })}
+                loading={deleting}
+                loadingLabel={t('contractTypes.deleting')}
+                confirmLabel={t('contractTypes.deleteAction')}
+                onCancel={() => setTypeToDelete(null)}
+                onConfirm={handleDelete}
+            />
         </Layout>
     );
 };

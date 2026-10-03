@@ -13,7 +13,13 @@ const messages = {
             cancel: 'Cancel',
             save: 'Save',
             create: 'Create',
-            loading: 'Loading...'
+            loading: 'Loading...',
+            delete: 'Delete',
+            deleteConfirmHint: 'To avoid mistakes, you must tap Delete 3 times.',
+            deleteConfirmStep: 'Step {{current}} of {{required}}',
+            deleteConfirmReady: 'Last tap — deletion will start now.',
+            deleteClicksRemaining: '{{count}} more tap(s) required',
+            deleteActionWithStep: 'Delete ({{current}}/{{required}})'
         },
         nav: {
             administrator: 'Administrator',
@@ -41,6 +47,8 @@ const messages = {
             loginPlaceholder: 'Enter login',
             passwordPlaceholder: 'Enter password',
             password: 'Password',
+            showPassword: 'Show password',
+            hidePassword: 'Hide password',
             submit: 'Sign in',
             success: 'Login successful.',
             welcomeBack: 'Welcome back, {{prenom}}!',
@@ -360,7 +368,12 @@ const messages = {
             saving: 'Saving...',
             deleting: 'Deleting...',
             deleteAction: 'Delete',
-            deleteConfirm: 'Delete {{name}}? This action may be irreversible.'
+            deleteConfirm: 'Delete {{name}}? This action may be irreversible.',
+            perPage: 'Per page',
+            totalTypes: '{{count}} contract type(s)',
+            previous: 'Prev.',
+            next: 'Next',
+            page: 'Page {{page}} / {{total}}'
         }
     },
     fr: {
@@ -372,7 +385,13 @@ const messages = {
             cancel: 'Annuler',
             save: 'Enregistrer',
             create: 'Créer',
-            loading: 'En cours...'
+            loading: 'En cours...',
+            delete: 'Supprimer',
+            deleteConfirmHint: 'Pour éviter une erreur, appuyez 3 fois sur Supprimer.',
+            deleteConfirmStep: 'Étape {{current}} sur {{required}}',
+            deleteConfirmReady: 'Dernier appui — la suppression va démarrer.',
+            deleteClicksRemaining: 'Encore {{count}} appui(s) requis',
+            deleteActionWithStep: 'Supprimer ({{current}}/{{required}})'
         },
         nav: {
             administrator: 'Administrateur',
@@ -400,6 +419,8 @@ const messages = {
             loginPlaceholder: 'Entrer le login',
             passwordPlaceholder: 'Entrer le mot de passe',
             password: 'Mot de passe',
+            showPassword: 'Afficher le mot de passe',
+            hidePassword: 'Masquer le mot de passe',
             submit: 'Se connecter',
             success: 'Connexion réussie.',
             welcomeBack: 'Bon retour, {{prenom}} !',
@@ -719,7 +740,12 @@ const messages = {
             saving: 'Enregistrement...',
             deleting: 'Suppression...',
             deleteAction: 'Supprimer',
-            deleteConfirm: 'Supprimer {{name}} ? Cette action peut être irréversible.'
+            deleteConfirm: 'Supprimer {{name}} ? Cette action peut être irréversible.',
+            perPage: 'Par page',
+            totalTypes: '{{count}} type(s) de contrat',
+            previous: 'Préc.',
+            next: 'Suiv.',
+            page: 'Page {{page}} / {{total}}'
         }
     }
 };

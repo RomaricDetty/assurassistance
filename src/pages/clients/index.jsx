@@ -16,6 +16,7 @@ import { sendToastError, sendToastSuccess } from '../../helpers';
 import JSZip from 'jszip';
 import { useI18n } from '../../i18n';
 import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
+import { ConfirmDeleteModal } from '../../components/confirm-delete-modal';
 
 /** Mappe un client API vers les données attendues par fillPdfContrat. */
 const clientToPdfData = (c, types = []) => toPdfData(c, types);
@@ -500,13 +501,13 @@ export const Clients = () => {
                                                 </select>
                                                 <span className="text-muted small">{t('clients.totalClients', { count: total })}</span>
                                             </div>
-                                            <nav aria-label="Pagination du tableau">
+                                            <nav className="d-flex flex-wrap align-items-center justify-content-end gap-2" aria-label="Pagination du tableau">
                                                 <ul className="pagination pagination-sm mb-0">
                                                     <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
                                                         <button type="button" className="page-link" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>{t('clients.previous')}</button>
                                                     </li>
-                                                    {totalPages > 1 && Array.from({ length: totalPages }, (_, i) => i + 1)
-                                                        .filter((p) => p === 1 || p === totalPages || (p >= page - 2 && p <= page + 2))
+                                                    {Array.from({ length: Math.max(totalPages, 1) }, (_, i) => i + 1)
+                                                        .filter((p) => p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1))
                                                         .map((p, i, arr) => (
                                                             <React.Fragment key={p}>
                                                                 {i > 0 && arr[i - 1] !== p - 1 && <li className="page-item disabled"><span className="page-link">…</span></li>}
@@ -519,7 +520,7 @@ export const Clients = () => {
                                                         <button type="button" className="page-link" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>{t('clients.next')}</button>
                                                     </li>
                                                 </ul>
-                                                <span className="ms-2 text-muted small">{t('clients.page', { page, total: totalPages || 1 })}</span>
+                                                <span className="pagination-meta text-muted small">{t('clients.page', { page, total: totalPages || 1 })}</span>
                                             </nav>
                                         </div>
                                     )}
@@ -570,48 +571,36 @@ export const Clients = () => {
                 </div>
             )}
 
-            {clientToDelete && (
-                <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">{t('clients.deleteClientTitle')}</h5>
-                                <button type="button" className="btn-close" onClick={() => setClientToDelete(null)} aria-label={t('common.cancel')} />
-                            </div>
-                            <div className="modal-body">
-                                <p className="mb-0">{t('clients.deleteClientConfirm', { name: `${clientToDelete.prenomClient} ${clientToDelete.nomClient}` })}</p>
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setClientToDelete(null)}>{t('common.cancel')}</button>
-                                <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>{deleting ? t('clients.deleting') : t('clients.deleteAction')}</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmDeleteModal
+                open={Boolean(clientToDelete)}
+                title={t('clients.deleteClientTitle')}
+                message={t('clients.deleteClientConfirm', { name: `${clientToDelete?.prenomClient ?? ''} ${clientToDelete?.nomClient ?? ''}`.trim() })}
+                loading={deleting}
+                loadingLabel={t('clients.deleting')}
+                confirmLabel={t('clients.deleteAction')}
+                onCancel={() => setClientToDelete(null)}
+                onConfirm={handleDelete}
+            />
 
-            {showBulkDeleteModal && (
-                <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">{t('clients.deleteSelection')}</h5>
-                                <button type="button" className="btn-close" onClick={() => setShowBulkDeleteModal(false)} aria-label={t('common.cancel')} />
-                            </div>
-                            <div className="modal-body">
-                                <p className="mb-0">{t('clients.deleteSelectionConfirm', { count: selectedIds.length })}</p>
-                                {deleteBulkProgress && (
-                                    <p className="mb-0 mt-2 text-muted small">{t('clients.deletingProgress', { current: deleteBulkProgress.current.toLocaleString('fr-FR'), total: deleteBulkProgress.total.toLocaleString('fr-FR') })}</p>
-                                )}
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setShowBulkDeleteModal(false)} disabled={deletingBulk}>{t('common.cancel')}</button>
-                                <button type="button" className="btn btn-danger" onClick={handleBulkDelete} disabled={deletingBulk}>{deletingBulk ? t('clients.deleting') : t('clients.deleteAction')}</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmDeleteModal
+                open={showBulkDeleteModal}
+                title={t('clients.deleteSelection')}
+                message={t('clients.deleteSelectionConfirm', { count: selectedIds.length })}
+                loading={deletingBulk}
+                loadingLabel={t('clients.deleting')}
+                confirmLabel={t('clients.deleteAction')}
+                onCancel={() => setShowBulkDeleteModal(false)}
+                onConfirm={handleBulkDelete}
+            >
+                {deleteBulkProgress && (
+                    <p className="mb-0 mt-3 text-muted small text-center">
+                        {t('clients.deletingProgress', {
+                            current: deleteBulkProgress.current.toLocaleString('fr-FR'),
+                            total: deleteBulkProgress.total.toLocaleString('fr-FR')
+                        })}
+                    </p>
+                )}
+            </ConfirmDeleteModal>
         </Layout>
     );
 };

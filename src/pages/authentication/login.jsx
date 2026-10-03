@@ -21,6 +21,7 @@ export const Login = () => {
     const [loading, setLoading] = useState(false);
     const [formErrors, setFormErrors] = useState({});
     const [submitted, setSubmitted] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const navigate = useNavigate();
     const dispatch = useDispatch();
@@ -141,17 +142,28 @@ export const Login = () => {
                                                     <label className="form-label" htmlFor="userpassword">
                                                         {t('login.password')}
                                                     </label>
-                                                    <input
-                                                        type="password"
-                                                        className={`form-control ${submitted && formErrors.password ? 'is-invalid' : ''}`}
-                                                        name="password"
-                                                        id="userpassword"
-                                                        placeholder={t('login.passwordPlaceholder')}
-                                                        value={formData.password}
-                                                        onChange={handleChange}
-                                                    />
+                                                    <div className="input-group">
+                                                        <input
+                                                            type={showPassword ? 'text' : 'password'}
+                                                            className={`form-control ${submitted && formErrors.password ? 'is-invalid' : ''}`}
+                                                            name="password"
+                                                            id="userpassword"
+                                                            placeholder={t('login.passwordPlaceholder')}
+                                                            value={formData.password}
+                                                            onChange={handleChange}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-outline-secondary"
+                                                            onClick={() => setShowPassword((prev) => !prev)}
+                                                            title={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+                                                            aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+                                                        >
+                                                            <i className={showPassword ? 'iconoir-eye-closed' : 'iconoir-eye'} style={{ fontSize: '1.1rem' }} />
+                                                        </button>
+                                                    </div>
                                                     {submitted && formErrors.password && (
-                                                        <div className="invalid-feedback" style={{ fontSize: '0.8rem' }}>{formErrors.password}</div>
+                                                        <div className="invalid-feedback d-block" style={{ fontSize: '0.8rem' }}>{formErrors.password}</div>
                                                     )}
                                                 </div>
 

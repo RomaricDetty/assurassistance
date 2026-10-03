@@ -26,6 +26,7 @@ import { sendToastError, sendToastSuccess } from '../../helpers';
 import { useI18n } from '../../i18n';
 import { extractList, getApiErrorMessage, isApiSuccess } from '../../utils/apiResponse';
 import { parseAndValidateCardsInput } from '../../utils/carteAutorisee';
+import { ConfirmDeleteModal } from '../../components/confirm-delete-modal';
 import './admin-groups-tabs.css';
 
 const INTERFACE_LINK_OPTIONS = [
@@ -834,13 +835,13 @@ export const AdministrationGroupes = () => {
                                             </select>
                                             <span className="text-muted small">{t('administration.totalAgents', { count: agents.length })}</span>
                                         </div>
-                                        <nav aria-label="Pagination du tableau">
+                                        <nav className="d-flex flex-wrap align-items-center justify-content-end gap-2" aria-label="Pagination du tableau">
                                             <ul className="pagination pagination-sm mb-0">
                                                 <li className={`page-item ${agentsPage <= 1 ? 'disabled' : ''}`}>
                                                     <button type="button" className="page-link" onClick={() => setAgentsPage((p) => Math.max(1, p - 1))} disabled={agentsPage <= 1}>{t('administration.previous')}</button>
                                                 </li>
-                                                {agentsTotalPages > 1 && Array.from({ length: agentsTotalPages }, (_, i) => i + 1)
-                                                    .filter((p) => p === 1 || p === agentsTotalPages || (p >= agentsPage - 2 && p <= agentsPage + 2))
+                                                {Array.from({ length: Math.max(agentsTotalPages, 1) }, (_, i) => i + 1)
+                                                    .filter((p) => p === 1 || p === agentsTotalPages || (p >= agentsPage - 1 && p <= agentsPage + 1))
                                                     .map((p, i, arr) => (
                                                         <React.Fragment key={p}>
                                                             {i > 0 && arr[i - 1] !== p - 1 && <li className="page-item disabled"><span className="page-link">…</span></li>}
@@ -853,7 +854,7 @@ export const AdministrationGroupes = () => {
                                                     <button type="button" className="page-link" onClick={() => setAgentsPage((p) => Math.min(agentsTotalPages, p + 1))} disabled={agentsPage >= agentsTotalPages}>{t('administration.next')}</button>
                                                 </li>
                                             </ul>
-                                            <span className="ms-2 text-muted small">{t('clients.page', { page: agentsPage, total: agentsTotalPages || 1 })}</span>
+                                            <span className="pagination-meta text-muted small">{t('clients.page', { page: agentsPage, total: agentsTotalPages || 1 })}</span>
                                         </nav>
                                     </div>
                                 </>
@@ -948,27 +949,16 @@ export const AdministrationGroupes = () => {
                 </div>
             )}
 
-            {cardToDelete && (
-                <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">{t('administration.deleteCardTitle')}</h5>
-                                <button type="button" className="btn-close" onClick={() => setCardToDelete(null)} aria-label={t('common.cancel')} />
-                            </div>
-                            <div className="modal-body">
-                                <p className="mb-0">{t('administration.deleteCardConfirm', { card: cardToDelete })}</p>
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setCardToDelete(null)} disabled={deletingCard}>{t('common.cancel')}</button>
-                                <button type="button" className="btn btn-danger" onClick={handleConfirmDeleteCard} disabled={deletingCard}>
-                                    {deletingCard ? t('common.loading') : t('administration.delete')}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmDeleteModal
+                open={Boolean(cardToDelete)}
+                title={t('administration.deleteCardTitle')}
+                message={t('administration.deleteCardConfirm', { card: cardToDelete || '' })}
+                loading={deletingCard}
+                loadingLabel={t('common.loading')}
+                confirmLabel={t('administration.delete')}
+                onCancel={() => setCardToDelete(null)}
+                onConfirm={handleConfirmDeleteCard}
+            />
         </Layout>
     );
 };
